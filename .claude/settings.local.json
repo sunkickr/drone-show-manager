@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.reddit.com)"
+    ]
+  },
+  "env": {
+    "ARIZE_API_KEY": "ak-1e8aff49-47f1-4c5c-a2ad-91ae8032757b-CShuNEvevh4yyiGEXtEvbX81i6260mKf",
+    "ARIZE_SPACE_ID": "U3BhY2U6NDQ0MDY6alVPYw==",
+    "ARIZE_PROJECT_NAME": "drone-show-manager-claude-code",
+    "ARIZE_TRACE_ENABLED": "true"
+  }
+}

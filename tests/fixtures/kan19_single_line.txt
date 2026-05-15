@@ -1,0 +1,59 @@
+Contact Info
+Full Name: Hiroshi Yamamoto
+Company: Sakura Tech Expo
+Job Title: Event Director
+Email: h.yamamoto@sakuratech.jp
+Phone Number: 81-6-555-1187
+Website: https://sakuratech.jp
+Location / Address: 4-1-1 Senri Banpaku Koen, Suita, Osaka 565-0826, Japan
+Social Links: LinkedIn: linkedin.com/in/hiroshiyamamoto-ste | Instagram: @sakuratechexpo
+Lead Info
+Lead Source: Referral (Kyoto Spring Festival contact)
+Lead Status: Won
+Estimated Budget: 460,000 USD
+Show Type: High count
+Priority: High
+ADHOC Sales Contact: Marcus Chen
+Show Description: Opening of Sakura Tech Expo 2025 at Banpaku Park, themed around the 50-year arc from Expo 1970 to the AI age. Drone show traces Japanese tech innovation history visually. 13 minutes.
+Active Project: https://docs.google.com/document/d/1aBcSakuraTech2025/edit
+Contract Info
+Link to Upstream Contract: https://docs.google.com/document/d/1xyzUpSakura2025/edit
+Link to Downstream Contracts: https://docs.google.com/document/d/1xyzDnSakuraPilots/edit, https://docs.google.com/document/d/1xyzDnSakuraGear/edit
+Show Design Info
+Assigned Design Lead: Yuki Tanaka
+Map of Show Area: https://docs.google.com/document/d/1mapSakuraArea/edit
+Drone Count: 700
+Length of Show: 13 minutes
+Audio Plan: Original score by Ryuichi Sakamoto Foundation composer, broadcast on park-wide PA plus VR headset audio for invited press
+Deliverable Timelines: Locked 2025-09-30, rehearsals 2025-11-08
+Storyboards: https://docs.google.com/document/d/1storySakuraFinal/edit
+Client Revisions: 2 of 3 used
+Event Details
+On Site Date(s): 2025-11-08 to 2025-11-14
+Testing and Performance Date(s): Testing 2025-11-10, 2025-11-11. Performance 2025-11-12 19:00 local
+ADHOC On-Site Producer: Carlos Mendez
+Pilot and CoPilot: Captain Tom Henderson (PIC) and Captain Maya Foster (CoPilot), Skyburst Drones LLC holds JCAB waiver
+Support Hands: 10 hands, ADHOC POC: Lila Nakamura, arrival 2025-11-07, departure 2025-11-15
+Company Providing Drones/Batteries/Support Gear: Skyburst Drones LLC and Nightfall Aero (split deployment due to scale)
+Transport Plan: Air freight from JFK 2025-10-25, arrival KIX Osaka 2025-10-28
+Storage Plan: Banpaku Park dedicated event warehouse, 24/7 security with ALSOK
+Map of Show Location: https://docs.google.com/document/d/1mapSakuraLoc/edit
+Permit Requirements and Timeline
+Aviation Liability Insurance: 15M USD via Tokio Marine, policy TM-2025-JPN-0098
+FAA: N/A - International venue. JCAB waiver JCAB-2025-OSK-DR-088 secured 2025-09-15
+Pyrodrone Fire Marshal Permit: Not applicable
+Local Fire Department Notice: Osaka Municipal Fire Bureau notified 2025-10-01
+Local Police Notice: Osaka Prefectural Police notified 2025-10-05, traffic plan reviewed
+Venue Requirements: Banpaku Park management approval received 2025-08-20, exclusivity confirmed
+City Requirements: Osaka Prefecture event permit OSK-2025-EV-1244 approved 2025-09-20
+Gear List
+Drones: 700x mixed fleet (450x Skyburst Pro X9, 250x Nightfall Phoenix)
+Batteries: 2,100x mixed pack inventory
+Battery Chargers: 36x mixed MultiPort and HexCharge units
+Power Source for Battery Chargers: 3x 60kW generators plus venue grid
+Base Station: 2x command stations (one per fleet vendor) with cross-link sync
+Media Capture Plan
+ADHOC Responsible Party: Raj Kumar
+Content Handoff Plan: 4K master plus 8K archival capture, NHK broadcast feed, social cuts within 24 hours, VR capture for press kit
+Drone Show Debrief
+Show executed on 2025-11-12 with park audience of 35,000 plus NHK broadcast reaching 4.5M viewers domestic. Largest ADHOC show by drone count and most complex multi-vendor coordination to date. Mixed-fleet sync between Skyburst and Nightfall systems required custom integration work that pushed schedule but performed cleanly on show night. Three drones lost (within tolerance). Financial outcome: 3% margin below target due to integration overhead. Lessons learned: multi-vendor shows require dedicated integration lead role we did not staff; future shows over 500 drones with multiple fleets should add 30 days lead time and a 0.5 FTE integration engineer for 6 weeks pre-show.

@@ -1,0 +1,72 @@
+h2. Contact Info
+
+* *Full Name*: Diego Fernández
+* *Company*: Patagonia Adventure Co
+* *Job Title*: CEO
+* *Email*: diego@patagoniaadventure.ar
+* *Phone Number*: +54-294-555-4081
+* *Website*: https://patagoniaadventure.ar
+* *Location / Address*: Av. Bustillo Km 7.5, San Carlos de Bariloche, Río Negro, Argentina
+* *Social Links*: LinkedIn: linkedin.com/in/diegofernandez-pa | Instagram: @patagoniaadventureco
+
+h2. Lead Info
+
+* *Lead Source*: Web (inbound from blog post on adventure tourism marketing)
+* *Lead Status*: Won
+* *Estimated Budget*: $165,000 USD
+* *Show Type*: Low count
+* *Priority*: Medium
+* *ADHOC Sales Contact*: David Rodriguez
+* *Show Description*: 10-year anniversary celebration for Patagonia Adventure Co, performed over Lake Nahuel Huapi at sunset. Show themes: Andean peaks, lake reflections, wildlife (condors, pumas), and the brand's "explore responsibly" ethos. Intimate audience of brand partners and press.
+* *Active Project*: https://docs.google.com/document/d/1aBcPatagoniaAdv2026/edit
+
+h2. Contract Info
+
+* *Link to Upstream Contract*: https://docs.google.com/document/d/1xyzUpstreamPatagonia2026/edit
+* *Link to Downstream Contracts*: https://docs.google.com/document/d/1xyzDownstreamPatagoniaPilots/edit, https://docs.google.com/document/d/1xyzDownstreamPatagoniaTransport/edit
+
+h2. Show Design Info
+
+* *Assigned Design Lead*: Ben Mwangi
+* *Map of Show Area*: https://docs.google.com/document/d/1mapPatagoniaShowArea/edit
+* *Drone Count*: 200
+* *Length of Show*: 9 minutes
+* *Audio Plan*: Acoustic guitar performance by Argentine composer Ariel Ramírez Jr., delivered via Bluetooth speakers around the lakeside audience perimeter. No PA system to preserve natural setting.
+* *Deliverable Timelines*: Locked 2026-04-15. On-site rehearsals 2026-05-15 to 2026-05-16.
+* *Storyboards*: https://docs.google.com/document/d/1storyPatagoniaFinal/edit
+* *Client Revisions*: 2 of 3 used
+
+h2. Event Details
+
+* *On Site Date(s)*: 2026-05-15 to 2026-05-18
+* *Testing and Performance Date(s)*: Testing 2026-05-15 dusk, 2026-05-16 dusk. Performance 2026-05-17 19:45 local (sunset)
+* *ADHOC On-Site Producer*: Anna Schmidt
+* *Pilot and CoPilot*: Captain Erik Hansen (PIC) and Captain Sara Kim (CoPilot), both with Verge Aerial - Verge Aerial holds the ANAC waiver
+* *Support Hands*: 4 hands, ADHOC POC: Lila Nakamura, arrival 2026-05-14, departure 2026-05-19
+* *Company Providing Drones/Batteries/Support Gear*: Verge Aerial (full gear package)
+* *Transport Plan*: Ocean freight from Long Beach CA 2026-04-01, arrival Buenos Aires port 2026-04-25, ground transport 1,600km to Bariloche 2026-04-30 to 2026-05-02
+* *Storage Plan*: On-site secure container at Llao Llao Resort property, fenced with local guard service Vigilancia del Sur
+* *Map of Show Location*: https://docs.google.com/document/d/1mapPatagoniaLocationDetail/edit (launch barge on lake, 300m safety radius, no overflight of audience)
+
+h2. Permit Requirements and Timeline
+
+* *Aviation Liability Insurance*: $5M coverage via AIG Argentina, policy AIG-2026-ARG-0445
+* *FAA*: N/A - International venue. Argentine ANAC waiver ANAC-AR-2026-RN-0033 secured 2026-03-20
+* *Pyrodrone Fire Marshal Permit*: Not applicable
+* *Local Fire Department Notice*: Bomberos Voluntarios de Bariloche notified 2026-04-01, on-site presence confirmed for show night
+* *Local Police Notice*: Policía de Río Negro notified 2026-04-05, traffic coordination plan reviewed
+* *Venue Requirements*: Llao Llao Resort venue agreement signed 2026-02-15, includes 8-hour exclusivity window
+* *City Requirements*: Municipal permit Bariloche EV-2026-0156 approved 2026-03-25
+
+h2. Gear List
+
+* *Drones*: 200x Verge Aerial Stratus 200 (Verge Aerial)
+* *Batteries*: 600x Verge LiPo 3300mAh packs (Verge Aerial)
+* *Battery Chargers*: 12x Verge HexCharge 20-bay units (Verge Aerial)
+* *Power Source for Battery Chargers*: 1x 30kW generator + grid hookup at venue (rented from local supplier La Plata Power)
+* *Base Station*: 1x Verge CommandLite portable unit with backup (Verge Aerial)
+
+h2. Media Capture Plan
+
+* *ADHOC Responsible Party*: Raj Kumar
+* *Content Handoff Plan*: 4K master + Patagonia Adventure Co brand cutdowns (30s, 60s, 90s). Delivered via WeTransfer within 48 hours. No live broadcast — recorded only.
