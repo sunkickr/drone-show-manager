@@ -15,7 +15,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)  # .env wins over any pre-exported shell variables
 
 from opentelemetry import trace as otel_trace
 from agents import Runner, trace as agents_trace

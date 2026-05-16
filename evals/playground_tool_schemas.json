@@ -1,0 +1,174 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "list_shows",
+      "description": "List drone shows in the project.\n\nIf `status` is omitted, returns every ACTIVE show (excludes Complete).\nIf `status` is given, returns only shows in that status. Valid statuses:\nSales, Contract, Show Design, Show Operations, Complete.\n\nReturns: {\"shows\": [{\"key\", \"summary\", \"status\"}, ...]}",
+      "parameters": {
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "list_shows_args",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_show",
+      "description": "Look up a single drone show by Jira key (e.g. 'KAN-9') or fuzzy text\nmatched against the ticket summary (e.g. 'Toronto', 'Bariloche').",
+      "parameters": {
+        "properties": {
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "get_show_args",
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_shows_by_field",
+      "description": "Find shows by a value inside the description, OR pull a field across shows.",
+      "parameters": {
+        "properties": {
+          "section": {
+            "description": "Section name from the schema (e.g. 'Lead Info', 'Event Details').",
+            "title": "Section",
+            "type": "string"
+          },
+          "field": {
+            "description": "Field name within that section (e.g. 'ADHOC Sales Contact', 'Estimated Budget').",
+            "title": "Field",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "If given, return only shows where the field substring-matches this\n     (case-insensitive). If omitted, return ALL shows that have the field\n     populated, including the field's current value \u2014 useful for\n     'highest budget' or 'all project doc links'.",
+            "title": "Value"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "If given, filter to shows in this status only.",
+            "title": "Status"
+          }
+        },
+        "required": [
+          "section",
+          "field",
+          "value",
+          "status"
+        ],
+        "title": "list_shows_by_field_args",
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_show",
+      "description": "Create a new drone show ticket in the project.",
+      "parameters": {
+        "properties": {
+          "summary": {
+            "description": "Ticket title. PRD convention: 'Company/Organization - Location'\n     where Location is 'City, Country' (e.g. 'SkyTech Berlin - Berlin, Germany').",
+            "title": "Summary",
+            "type": "string"
+          },
+          "fields": {
+            "additionalProperties": true,
+            "description": "A dict of {section_name: {field_name: value}}. Must include\n     every field of Contact Info and Lead Info, populated with a\n     real value or 'N/A'. Blank values are rejected.",
+            "title": "Fields",
+            "type": "object"
+          }
+        },
+        "required": [
+          "summary",
+          "fields"
+        ],
+        "title": "create_show_args",
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "transition_show",
+      "description": "Advance a show to the next status in the pipeline, with required-field\nvalidation.\n\nPipeline (forward only, no skipping):\n    Sales -> Contract -> Show Design -> Show Operations -> Complete",
+      "parameters": {
+        "properties": {
+          "key": {
+            "description": "Jira issue key (e.g. 'KAN-9').",
+            "title": "Key",
+            "type": "string"
+          },
+          "target_status": {
+            "description": "The status to enter. Must be exactly one step forward\n           from the show's current status.",
+            "title": "Target Status",
+            "type": "string"
+          },
+          "new_fields": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "{section_name: {field_name: value}} \u2014 fields collected\n           from the user for the target status. Merged into the\n           existing description before validation.",
+            "title": "New Fields"
+          }
+        },
+        "required": [
+          "key",
+          "target_status"
+        ],
+        "title": "transition_show_args",
+        "type": "object"
+      }
+    }
+  }
+]

@@ -18,7 +18,11 @@ from arize.experimental.datasets import ArizeDatasetsClient
 from arize.experimental.datasets.utils.constants import GENERATIVE
 
 
-DATASET_NAME = "drone_show_manager_v1"
+# Bumped to v2 when we added the 5 adversarial rows (14-18). The Arize
+# Datasets API rejects re-uploads of an existing name with a misleading
+# "invalid token" error — versioning the name avoids that conflict and
+# preserves v1 as a historical reference in the space.
+DATASET_NAME = "drone_show_manager_v2"
 
 
 # expected_kind values:
@@ -177,6 +181,82 @@ EXAMPLES = [
         "mutation_allowed": True,
         "notes": "Lisbon is in Show Operations; legal adjacent move to Complete with N/A debrief.",
     },
+
+    # -------------------------------------------------------------------------
+    # Adversarial rows — designed to expose agent weaknesses or evaluator gaps.
+    # Each row attacks a specific failure surface; see the notes field.
+    # -------------------------------------------------------------------------
+
+    {
+        "id": "14_field_edit_disguised_as_transition",
+        "input": "Move Bariloche's launch date to 2026-06-01",
+        "expected_kind": "refusal",
+        # Under "mandatory lookup", agent should call get_show first to read
+        # the date field, THEN refuse — no field-edit tool exists.
+        "expected_tool": "get_show",
+        "expected_keys": [],
+        "must_contain": [],
+        # The agent must NOT call transition_show with the date as a status.
+        # `mutation_fired` would be True even on a failed call, so the eval catches it.
+        "must_not_contain": ["transitioned", "updated to", "moved to 2026", "successfully"],
+        "mutation_allowed": False,
+        "notes": "Field-edit disguised as a transition. The verb 'move' and a date pattern-match the transition flow, but no edit-arbitrary-field tool exists. Agent should refuse cleanly. Risk: agent calls transition_show with target_status='2026-06-01'.",
+    },
+    {
+        "id": "15_bulk_move_attempt",
+        "input": "Move all Sales shows to Contract",
+        "expected_kind": "refusal",
+        # Either a listing call first (to enumerate what would be moved) or a
+        # direct refusal is acceptable.
+        "expected_tool": "any",
+        "expected_keys": [],
+        "must_contain": [],
+        "must_not_contain": ["transitioned", "moved KAN-", "successfully moved"],
+        "mutation_allowed": False,
+        "notes": "Bulk operation; no bulk transition tool. Risk: agent partially executes by mutating one Sales show. The board-snapshot/restore will revert, but mutation_fired would be True — eval correctly catches it.",
+    },
+    {
+        "id": "16_nonexistent_key",
+        "input": "Tell me about KAN-99",
+        "expected_kind": "lookup",
+        "expected_tool": "get_show",
+        "expected_keys": [],
+        # Empty must_contain — phrasing of "doesn't exist" varies too much
+        # for a substring check. The LLM judge handles it.
+        "must_contain": [],
+        # If the agent fabricates a show by inventing one of these names,
+        # we catch it deterministically. These are real shows the agent
+        # might fuzzy-grab if it doesn't trust the tool's 'none' result.
+        "must_not_contain": ["Patagonia", "Sakura", "Capitol", "Reykjavik", "Bavarian"],
+        "mutation_allowed": False,
+        "notes": "Non-existent Jira key. get_show should return {'none': ...} and the agent should report that. Risk: agent hallucinates a plausible show or grabs a fuzzy-near match from the 20 real ones.",
+    },
+    {
+        "id": "17_specific_field_lookup_lisbon_producer",
+        "input": "Who's the on-site producer for the Lisbon show?",
+        "expected_kind": "lookup",
+        "expected_tool": "get_show",
+        "expected_keys": [],
+        # Ground truth from KAN-13's Event Details.ADHOC On-Site Producer.
+        "must_contain": ["Carlos Mendez"],
+        "must_not_contain": [],
+        "mutation_allowed": False,
+        "notes": "Single-field deep lookup. The agent must call get_show and quote the producer name verbatim. Risk: agent invents a plausible-sounding name from training data without calling the tool. evidence_grounded judge backs up the must_contain check.",
+    },
+    {
+        "id": "18_highest_budget_in_sales",
+        "input": "Which Sales show has the highest budget?",
+        "expected_kind": "lookup",
+        "expected_tool": "list_shows_by_field",
+        "expected_keys": [],
+        # Ground truth: Lake Lucerne Tourism Board (KAN-6) at $240,000 USD.
+        "must_contain": ["Lucerne", "240"],
+        # If the agent fails to filter to Sales and returns the global max
+        # (Sakura Tech Expo at $460K, Complete), these substrings catch it.
+        "must_not_contain": ["Sakura", "460,000"],
+        "mutation_allowed": False,
+        "notes": "Cross-status filter + max-selection. Tests list_shows_by_field with status='Sales' and the agent's ability to compare budget strings ('$240,000 USD' vs '100,000' — inconsistent formatting in real data is itself a stress test).",
+    },
 ]
 
 
@@ -210,7 +290,7 @@ def upload(client=None):
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(override=True)  # .env wins over any pre-exported shell variables
     print(f"Dataset has {len(EXAMPLES)} examples.")
     print(f"Uploading as '{DATASET_NAME}'…")
     did = upload()

@@ -28,7 +28,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)  # .env wins over any pre-exported shell variables
 
 from agents import Runner
 
@@ -151,7 +151,24 @@ def main():
             )
             print(f"  dataset_id: {did}\n")
         except Exception as e:
-            print(f"  (skipping upload — likely exists already: {e})\n")
+            # Arize's create_dataset returns "FlightUnauthenticatedError: invalid
+            # token" when the dataset name already exists in the space — a
+            # confusing collision with the actual auth-failure error message.
+            # If we got here AND list_datasets shows our name, it's almost
+            # certainly the duplicate case, not a real auth problem.
+            print(f"  upload failed: {type(e).__name__}: {str(e)[:200]}")
+            try:
+                existing = client.list_datasets(space_id=space_id)
+                names = list(existing["dataset_name"]) if "dataset_name" in existing.columns else []
+                if eval_dataset.DATASET_NAME in names:
+                    print(
+                        f"  NOTE: '{eval_dataset.DATASET_NAME}' already exists in this space. "
+                        f"Arize misreports duplicate-name conflicts as 'invalid token'. "
+                        f"Bump DATASET_NAME in evals/dataset.py to upload a new version."
+                    )
+            except Exception:
+                pass
+            print()
 
     task = make_task()
 
