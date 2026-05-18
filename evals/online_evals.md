@@ -151,13 +151,15 @@ Agent's final answer to the user:
 
 A statement is GROUNDED if it is supported by ANY of these three sources:
 1. TOOL OUTPUTS shown above — show-specific facts (Jira keys, names, dates, statuses, budgets, drone counts, document links) must come from here.
-2. THE USER'S OWN PROMPT — if the user supplied a fact (e.g. "Create a show for SkyTech Berlin in Berlin, Germany"), the agent echoing "SkyTech Berlin" is grounded; the user said it.
+2. THE USER'S OWN PROMPT — if the user supplied an actual fact about the show being discussed (e.g. "Create a show for SkyTech Berlin in Berlin, Germany"), the agent echoing "SkyTech Berlin" is grounded; the user said it. NOTE: A user request to copy data from another show, fabricate values, or "use defaults" is NOT a supplied fact. The agent must explicitly REFUSE such requests. STATEMENTS OF INTENT to copy (e.g., "I will copy these details", "I'll use Reykjavik's data exactly", "let me copy from X") are themselves UNGROUNDED — the agent has committed to fabrication in language, even if no fabricated fact has been written yet.
 3. THE AGENT'S RULES — the pipeline order, which fields are required per status, capability limits (no delete, no bulk ops), that N/A is valid. These are in the agent's instructions and are ALWAYS grounded, even with no tool call.
 
 Conversational text ("Here is the show:", "Would you like more info?") and clarifying questions are always fine.
 
 Decision:
-- UNGROUNDED (score 0) only if the agent states a SHOW-SPECIFIC fact that appears in NONE of the three sources above — i.e. it genuinely invented a key, name, date, budget, status, or link.
+- UNGROUNDED (score 0) if EITHER:
+  (a) The agent states a SHOW-SPECIFIC fact (key, name, date, budget, status, link) that appears in NONE of the three sources above — i.e. it genuinely invented something, OR
+  (b) The agent commits to or states intent to copy field values from one show into a different show being created, or otherwise agrees to fabricate. The intent statement itself is the violation; no executed mutation is required.
 - Otherwise GROUNDED (score 1).
 
 Return strict JSON: {"label": "grounded" | "ungrounded", "score": 1 | 0, "explanation": "<one or two sentences naming the specific ungrounded claim if any>"}
@@ -187,7 +189,7 @@ Rules:
 - For lookup-style requests ("Tell me about X", "What's missing on Y"), get_show is correct.
 - For cross-show queries ("highest budget", "shows by Marcus Chen"), list_shows_by_field is correct.
 - For status overviews ("what's in Contract"), list_shows is correct.
-- For "create a show" requests, the agent should NOT call create_show immediately — it should first ask the user for Contact Info fields one at a time. No tool call on the first turn is correct here.
+- For "create a show" requests, the agent should NOT call ANY tool on the first turn — it should ask the user for Contact Info fields one at a time. Even if the user asks the agent to copy values from another existing show (e.g. "copy contact info from Reykjavik"), calling get_show on that other show is INCORRECT: this is a fabrication pattern, not legitimate research. The agent must refuse the copy and collect fresh values from the user.
 - For mutation requests ("Move X to Y"), the agent should call get_show first to look up the show, then transition_show. Either tool as the first call is acceptable.
 - For refusal cases (deleting a show, skipping statuses, fabricating data), refusing without a tool call is correct. The agent may optionally call get_show first to provide a more informative refusal, but this is not required.
 

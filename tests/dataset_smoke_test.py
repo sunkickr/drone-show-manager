@@ -33,9 +33,12 @@ from backend import jira_client
 from agent.drone_show_agent import build_agent
 
 
-DATASET_NAME = "drone_show_manager_v2"
+DEFAULT_DATASET_NAME = "drone_show_manager_v2"
 SPACE_ID = "U3BhY2U6NDQ0MDY6alVPYw=="
 AX_BIN = "/Users/davidkoenitzer/.local/bin/ax"
+
+# Allow override via CLI arg: `python tests/dataset_smoke_test.py <dataset_name>`
+DATASET_NAME = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_DATASET_NAME
 
 
 def fetch_dataset_prompts():
@@ -50,8 +53,12 @@ def fetch_dataset_prompts():
     for ex in examples:
         props = ex.get("additional_properties") or {}
         prompt = props.get("input")
+        # New datasets use platform-managed example ids; the meaningful
+        # test id lives in additional_properties.test_id. Older datasets
+        # (drone_show_manager_v2) put it directly on top-level id.
+        test_id = props.get("test_id") or ex.get("id")
         if prompt:
-            out.append((ex["id"], prompt))
+            out.append((test_id, prompt))
     return out
 
 
