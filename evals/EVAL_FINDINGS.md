@@ -326,6 +326,19 @@ These are observations about the *platform itself*, not our code. Each one is a 
 
 ---
 
+### D8. Silent template-substitution failure with `{{double}}` vs `{single}` braces
+**Discovered:** Online evals setup. Arize's online/Playground evaluators use **single curly braces** (`{input}`) for variable substitution. Double braces (`{{input}}` — the Mustache/Liquid convention many platforms use) pass through as a literal string with no substitution and no warning.
+
+**Why it's the most painful kind of bug:** LLM judges *don't fail loudly* on missing substitution — the model can usually infer the user's request from the rest of the prompt context, so scores come back populated and seemingly reasonable. A developer can run an entire eval suite without realizing the variables never resolved. The downstream effect is a metric that *appears to be measuring* the agent's behavior but is actually measuring how well the judge can guess from the prompt template alone. This may have affected our earlier Playground demo (`pg_correct_first_move`) — the 13/13 score may not reflect real substitution.
+
+**Distinguishing diagnostic:** Add a "debug echo" evaluator that returns `{input}` in its `explanation` field. If the explanation contains the literal string `{input}` instead of the actual user prompt, substitution isn't happening.
+
+**MVP fix proposal:** Either (a) the platform errors loudly on unrecognized template syntax at save time, OR (b) the variable picker shows the exact substitution syntax inline next to each variable name. Better: standardize on one convention across surfaces (online evals, Playground, dashboards) — these currently may differ in subtle ways.
+
+**Files affected in this project:** `evals/online_evals.md`, `evals/playground_judge.md` (both corrected to single-brace).
+
+---
+
 ### D7. Misleading auth error for partial key scope
 **Originally suspected this, then revised:** see D1. The "two key types" theory turned out to be wrong in this case — the real issue was duplicate-name conflict. But the underlying observation stands: Arize returns the same generic auth-error string for several distinct server-side states (revoked, wrong org, name conflict). A developer can't distinguish them without server logs.
 

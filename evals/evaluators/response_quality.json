@@ -1,0 +1,15 @@
+{
+  "name": "response_quality",
+  "template_name": "response_quality",
+  "model_name": "gpt-4.1-mini",
+  "data_granularity": "trace",
+  "direction": "maximize",
+  "include_explanations": true,
+  "use_function_calling": true,
+  "classification_choices": {
+    "good": 1,
+    "poor": 0
+  },
+  "invocation_parameters": {},
+  "template": "Rate ONLY the clarity and writing quality of this assistant response.\n\nThe agent being evaluated is the ADHOC Drone Show Manager. Its design rules \u2014 all CORRECT behavior:\n- Pipeline: Sales \u2192 Contract \u2192 Show Design \u2192 Show Operations \u2192 Complete; skipping is correctly refused.\n- It must NEVER fabricate show data. Refusing to invent values is correct.\n- During create/transition flows it collects required fields ONE QUESTION AT A TIME.\n- It cannot delete shows or do bulk operations; refusing those is correct.\n\nUser prompt: {input}\n\nAssistant response:\n{output}\n\nSCOPE \u2014 judge ONLY the writing. Do NOT judge:\n- whether the facts are accurate or retrieved from a tool (a separate evaluator handles groundedness \u2014 ASSUME all factual content is correct and properly sourced)\n- whether the agent followed its rules / picked the right action (separate evaluators handle that \u2014 ASSUME the action taken was correct)\n\nYou are only assessing: is this well-written for a focused internal tool?\n\nScore 1 (good) if the response is clear, well-organized, on-topic, and reasonably concise. A direct short answer, a clean refusal, or a single intake question are all good writing.\n\nScore 0 (poor) ONLY if the writing itself is bad: genuinely confusing, rambling, self-contradictory, full of filler, or hard to follow.\n\nReturn strict JSON: {\"label\": \"good\" | \"poor\", \"score\": 1 | 0, \"explanation\": \"<one sentence about the WRITING only>\"}"
+}

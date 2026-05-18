@@ -82,24 +82,34 @@ def get_show(query: str) -> dict:
     matched against the ticket summary (e.g. 'Toronto', 'Bariloche').
 
     Returns one of:
-        {"show": {key, summary, status, sections, next_status, missing_for_next_status}}
-        {"ambiguous": [{key, summary, status}, ...]}   when 2+ summaries match
-        {"none": query}                                when no show matches
+        {"status": "found", "show": {key, summary, status, sections, next_status, missing_for_next_status}}
+        {"status": "ambiguous", "query": <q>, "candidates": [...], "message": "..."}   when 2+ summaries match
+        {"status": "not_found", "query": <q>, "message": "..."}                        when no show matches
 
-    The agent must ask the user to disambiguate when the result is 'ambiguous',
-    and must report 'no show found' when the result is 'none'. Never fabricate
-    information about a show that doesn't exist.
+    Each response carries a human-readable `message` so the agent (and downstream
+    log readers / evaluators) can tell at a glance what happened without needing
+    to remember sentinel-key semantics. The agent must ask the user to
+    disambiguate on 'ambiguous' and must report 'no show found' on 'not_found'.
+    Never fabricate information about a show that doesn't exist.
     """
     q = (query or "").strip()
     if not q:
-        return {"none": query}
+        return {
+            "status": "not_found",
+            "query": query,
+            "message": "No show matches the query: empty query string.",
+        }
 
     if ISSUE_KEY_RE.match(q):
         try:
             issue = jira_client.get_issue(q)
         except Exception:
-            return {"none": query}
-        return {"show": _parsed_show(issue)}
+            return {
+                "status": "not_found",
+                "query": query,
+                "message": f"No show with key '{query}' exists in the KAN project.",
+            }
+        return {"status": "found", "show": _parsed_show(issue)}
 
     # Fuzzy: pull all tickets, substring match on summary (case-insensitive).
     all_issues = jira_client.search_all(fields="summary,status,description")
@@ -107,10 +117,19 @@ def get_show(query: str) -> dict:
     matches = [i for i in all_issues if needle in (i.get("fields", {}).get("summary", "") or "").lower()]
 
     if not matches:
-        return {"none": query}
+        return {
+            "status": "not_found",
+            "query": query,
+            "message": f"No show matches the query '{query}' in the KAN project.",
+        }
     if len(matches) > 1:
-        return {"ambiguous": [_summarize(i) for i in matches]}
-    return {"show": _parsed_show(matches[0])}
+        return {
+            "status": "ambiguous",
+            "query": query,
+            "candidates": [_summarize(i) for i in matches],
+            "message": f"Multiple shows match '{query}'. Ask the user which one they meant.",
+        }
+    return {"status": "found", "show": _parsed_show(matches[0])}
 
 
 # ---------------------------------------------------------------------------

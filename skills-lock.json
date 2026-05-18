@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "arize-dataset": {
+      "source": "Arize-ai/arize-skills",
+      "sourceType": "github",
+      "skillPath": "skills/arize-dataset/SKILL.md",
+      "computedHash": "9fcc6f39797bce4a86239a73d0e600e617e146ac5573cb48ae6f3873d54b233f"
+    },
+    "arize-evaluator": {
+      "source": "Arize-ai/arize-skills",
+      "sourceType": "github",
+      "skillPath": "skills/arize-evaluator/SKILL.md",
+      "computedHash": "ca5cda8a35446dd00c57e0de1b62962bc715f37a541a198c4de16202ad3a216d"
+    },
+    "arize-experiment": {
+      "source": "Arize-ai/arize-skills",
+      "sourceType": "github",
+      "skillPath": "skills/arize-experiment/SKILL.md",
+      "computedHash": "33a3253350f908707ea1a2b1f6afbf5da89e2566cd5b024a5295733064e69510"
+    }
+  }
+}

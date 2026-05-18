@@ -1,0 +1,15 @@
+{
+  "name": "right_tool_chosen",
+  "template_name": "right_tool_chosen",
+  "model_name": "gpt-4.1",
+  "data_granularity": "trace",
+  "direction": "maximize",
+  "include_explanations": true,
+  "use_function_calling": true,
+  "classification_choices": {
+    "correct": 1,
+    "incorrect": 0
+  },
+  "invocation_parameters": {},
+  "template": "Evaluate whether the agent picked a reasonable tool to address the user's request.\n\nThe agent being evaluated is the ADHOC Drone Show Manager. It has five tools:\n- list_shows(status): list shows in a status (default: all active)\n- get_show(query): details about ONE show (key or fuzzy name)\n- list_shows_by_field(section, field, value, status): filter shows by a field inside descriptions, or extract a field across shows. Common section mappings: budget/sales contact/show description/project doc link live in \"Lead Info\"; producer/on-site dates/venue live in \"Event Details\"; design lead/drone count live in \"Show Design Info\".\n- create_show(summary, fields): create a new show (mutates)\n- transition_show(key, target_status, new_fields): move a show to its next status (mutates)\n\nRules:\n- For lookup-style requests (\"Tell me about X\", \"What's missing on Y\"), get_show is correct.\n- For cross-show queries (\"highest budget\", \"shows by Marcus Chen\"), list_shows_by_field is correct.\n- For status overviews (\"what's in Contract\"), list_shows is correct.\n- For \"create a show\" requests, the agent should NOT call create_show immediately \u2014 it should first ask the user for Contact Info fields one at a time. No tool call on the first turn is correct here.\n- For mutation requests (\"Move X to Y\"), the agent should call get_show first to look up the show, then transition_show. Either tool as the first call is acceptable.\n- For refusal cases (deleting a show, skipping statuses, fabricating data), refusing without a tool call is correct. The agent may optionally call get_show first to provide a more informative refusal, but this is not required.\n\nUser prompt: {input}\nAgent's first tool call (and arguments):\n{tool_calls}\n\nScore 1 if the agent's first move was reasonable per the rules above. Score 0 if it called a wrong tool, called a correct tool with bad arguments (e.g. wrong section name for list_shows_by_field), or called a mutation tool when the request didn't authorize one.\n\nReturn strict JSON: {\"label\": \"correct\" | \"incorrect\", \"score\": 1 | 0, \"explanation\": \"<one sentence>\"}"
+}

@@ -41,6 +41,9 @@ Never fabricate information about a show. If a tool says a show doesn't exist, t
 # Mandatory lookup
 For ANY question or action about a SPECIFIC show, you MUST call a tool to retrieve that show's real data BEFORE you answer, refuse, or transition. Never answer a show-specific question — including a refusal — from memory or assumption. If you are about to refuse a transition, first call get_show so your refusal can name the show's actual current status.
 
+# Resolving references
+If the user says "it", "this show", "the show", or a similar pronoun WITHOUT naming a show, AND the immediately preceding turn in this conversation explicitly identified a specific show by name or Jira key, treat that as the show being referenced. Call get_show using that name or key to confirm the show's current data before acting. Do NOT ask the user to re-state the show name when the prior turn already named it — that is unnecessary friction. This applies only to *which show is being referenced* — all factual claims about the show (status, fields, budget, etc.) must still come from the get_show result, not from memory.
+
 `N/A` is a valid value if the user supplies it. Blank/empty is not.
 
 # Sequencing
@@ -56,7 +59,7 @@ Keep refusals tight: aim for 3-4 sentences total. Do not restate the full pipeli
 # Your tools
 You have exactly 5 tools. Pick the one that matches the user's intent:
 1. list_shows(status=None) — Status overviews. Default returns active shows. Pass a status name to filter.
-2. get_show(query) — Details about ONE show, plus "what's missing to advance". Accepts a Jira key or fuzzy name. If the result is `ambiguous`, ask the user which one they meant. If `none`, tell the user the show doesn't exist.
+2. get_show(query) — Details about ONE show, plus "what's missing to advance". Accepts a Jira key or fuzzy name. Check the response's `status` field: `found` (single match — proceed using `show`), `ambiguous` (multiple matches — ask the user which `candidate` they meant), or `not_found` (no match — tell the user the show doesn't exist).
 3. list_shows_by_field(section, field, value=None, status=None) — Cross-show queries. Use the section names exactly as listed below — the tool errors on unknown section+field combos. Field-to-section map:
    • Lead Info: Lead Source, Lead Status, Estimated Budget, Show Type, Priority, ADHOC Sales Contact, Show Description, Active Project (the project doc link lives here)
    • Contact Info: Full Name, Company, Job Title, Email, Phone Number, Website, Location / Address, Social Links
@@ -99,10 +102,15 @@ MUTATION_TOOLS = {"create_show", "transition_show"}
 _INTAKE_MARKERS = (
     "please provide",
     "could you provide",
+    "can you provide",
     "could you tell me",
+    "can you tell me",
     "what is the",
     "what's the",
+    "who is the",
+    "who's the",
     "i need the",
+    "i need to know",
     "i need you to provide",
     "tell me the",
     "which one would",
@@ -143,6 +151,14 @@ def run():
             workflow_ctx.__exit__(None, None, None)
             workflow_ctx = None
             workflow_name_set = False
+            # Compact history at workflow boundaries: drop all tool calls
+            # and tool outputs (the dominant source of context-window bloat
+            # that previously degraded the model into punctuation-only
+            # responses), and cap the surviving user/assistant text turns
+            # at _MAX_HISTORY_MESSAGES so multi-turn pronoun references
+            # like "move it to show design" still resolve even after an
+            # unrelated query in between.
+            _compact_history(history)
 
     def rename_workflow(name):
         """Set the workflow span's name on the first tool call of this trace."""
@@ -233,6 +249,45 @@ def _run_turn(agent, history, on_first_tool=None):
     else:
         complete = not _looks_like_followup(final)
     return complete, first_tool
+
+
+_MAX_HISTORY_MESSAGES = 10
+
+
+def _compact_history(history):
+    """Drop tool exchanges and cap conversation history to the most recent
+    user/assistant text messages.
+
+    Tool calls and tool outputs are the dominant source of context bloat
+    (a single Jira show payload is hundreds of tokens). Keeping them
+    across workflows previously degraded the model into punctuation-only
+    output once cumulative tokens approached the model's limit, so we
+    drop them at workflow boundaries.
+
+    The user/assistant text messages carry the conversational thread —
+    which show is being discussed, what the user just asked. We keep up
+    to _MAX_HISTORY_MESSAGES of these so the agent has multi-turn context
+    for pronoun resolution ("move it to show design" referring to a show
+    discussed a few workflows ago) without growing unbounded.
+    """
+    def field(obj, key):
+        return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+
+    kept = []  # newest-first; reversed to chronological below
+    for msg in reversed(history):
+        role = field(msg, "role")
+        if role not in ("user", "assistant"):
+            continue
+        content = field(msg, "content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        kept.append({"role": role, "content": content})
+        if len(kept) >= _MAX_HISTORY_MESSAGES:
+            break
+
+    kept.reverse()
+    history.clear()
+    history.extend(kept)
 
 
 def _looks_like_followup(text):

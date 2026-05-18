@@ -77,9 +77,44 @@ Once configured, score columns appear on every trace in the Traces view. You can
 
 ## Trace-shaped evaluator prompts
 
-These are adapted from the offline judges in `evals/evaluators.py`. The key difference: online prompts reference Arize's standard trace variables (`{{input}}`, `{{output}}`, plus any tool-call attributes the UI exposes) instead of dataset row columns.
+These are adapted from the offline judges in `evals/evaluators.py`. The key difference: online prompts reference Arize's standard trace variables (`{input}`, `{output}`, plus any tool-call attributes the UI exposes) instead of dataset row columns.
 
-> **Variable note:** Arize's online evaluator UI typically provides `{{input}}` (user message) and `{{output}}` (agent's final response). For tool calls, the variable name may differ per Arize version — common names include `{{tool_calls}}`, `{{attributes.tool_calls}}`, or `{{spans}}`. Check your project's evaluator panel for the exact variable list. The prompts below use `{{tool_calls}}` as a placeholder; substitute your version's actual variable name when pasting.
+> **Variable syntax — important:** Arize's online evaluator templates use **single curly braces**: `{input}`, `{output}`, `{tool_calls}`. (Standard Mustache/Liquid `{{double}}` does NOT substitute — it gets passed through as a literal string, and the judge will silently produce plausible-but-wrong scores by inferring from context.) Confirm by adding a "debug echo" evaluator that returns `"explanation": "{input}"` and verifying it interpolates rather than literally outputs `{input}`.
+>
+> **Variable names:** `{input}` (user message) and `{output}` (agent's final response) are universal. The tool-call variable name varies by Arize version — common forms include `{tool_calls}`, `{attributes.tool_calls}`, or `{spans}`. The prompts below use `{tool_calls}` as a placeholder; replace with whatever your project's variable picker lists.
+
+### Scope: trace (for all three)
+
+Arize binds every online evaluator to one of three scopes. Pick the wrong one and variables resolve to empty strings — the judge keeps scoring, but on partial data.
+
+| Scope | What it sees | When to use |
+|---|---|---|
+| **Span** | Attributes of a single span (one LLM call OR one tool call). | Per-tool checks (e.g. "did this tool return well-formed JSON?"). |
+| **Trace** | Aggregated across the whole workflow — root-span `{input}`, final `{output}`, and every child span's `{tool_calls}`. | Anything that reconciles inputs against tool outputs against the final answer. |
+| **Session** | Aggregated across multiple traces sharing a `session.id`. | Cross-workflow questions ("did this user's whole session contain a fabrication?"). |
+
+All three judges below are **trace-scoped**:
+
+- `evidence_grounded` reconciles `{output}` against `{tool_calls}` — a single span doesn't carry both.
+- `right_tool_chosen` needs `{input}` from the root span and the first tool call from a child span.
+- `response_quality` reads `{input}` and `{output}` — these live on different spans in our setup, so trace is the safe binding.
+
+Because our REPL already uses per-workflow trace boundaries (see the trade-off note below), one Arize trace = one full create-show or transition workflow, which matches the unit each judge reasons about.
+
+### Query filter: leave empty (for now)
+
+Arize lets you bind each evaluator to a query that selects which traces it scores. Possible values:
+
+- **Empty / "all traces"** — judge runs on every trace landing in the project.
+- **Filtered** — e.g. `span.kind = LLM`, `attributes.tool.name = create_show`, `metadata.environment = production`. Judge skips traces that don't match.
+
+For this project, leave it empty on all three judges. Reasons:
+
+1. Traffic is low (internal REPL + smoke tests) — cost of scoring every trace is negligible.
+2. The prompts already handle edge cases that a filter would otherwise exclude (refusals without tool calls, clarifying questions, conversational text).
+3. You need an unfiltered score distribution first to know what would even be worth filtering out.
+
+Revisit when traffic grows, when you start tagging traces (`environment=production|smoke`), or when you want different judges on different workflow types.
 
 ### Shared AGENT_RULES preamble
 
@@ -90,6 +125,10 @@ Every prompt below includes the agent's operating contract. This is the SAME `AG
 ### Evaluator 1: `evidence_grounded`
 
 **Purpose:** Catch fabrication. Score 0 if the agent invents any show-specific fact (Jira key, name, date, budget, link) not supported by tool output, the user's prompt, or the agent's own rules.
+
+**Scope:** Trace — needs `{input}`, `{tool_calls}`, and `{output}` simultaneously.
+
+**Optimization direction:** Maximize — score `1` means grounded (good).
 
 ```
 Evaluate whether the agent's answer is grounded — i.e. it does not fabricate facts about specific drone shows.
@@ -102,13 +141,13 @@ The agent being evaluated is the ADHOC Drone Show Manager, a focused internal Ji
 - It cannot delete shows or do bulk operations; refusing those is correct.
 - "N/A" is a valid field value; blank is not.
 
-User prompt: {{input}}
+User prompt: {input}
 
 Tool calls and outputs the agent observed this turn:
-{{tool_calls}}
+{tool_calls}
 
 Agent's final answer to the user:
-{{output}}
+{output}
 
 A statement is GROUNDED if it is supported by ANY of these three sources:
 1. TOOL OUTPUTS shown above — show-specific facts (Jira keys, names, dates, statuses, budgets, drone counts, document links) must come from here.
@@ -130,6 +169,10 @@ Return strict JSON: {"label": "grounded" | "ungrounded", "score": 1 | 0, "explan
 
 **Purpose:** Catch tool routing mistakes — the agent picking the wrong tool, or picking a tool with bad arguments. This evaluator is purely LLM-based for online (the offline version has a code shortcut that doesn't apply without an `expected_tool` rubric column).
 
+**Scope:** Trace — `{input}` comes from the root span; the first tool call lives on a child span. Span scope would force you to pick one and lose the other.
+
+**Optimization direction:** Maximize — score `1` means correct tool choice (good).
+
 ```
 Evaluate whether the agent picked a reasonable tool to address the user's request.
 
@@ -146,15 +189,15 @@ Rules:
 - For status overviews ("what's in Contract"), list_shows is correct.
 - For "create a show" requests, the agent should NOT call create_show immediately — it should first ask the user for Contact Info fields one at a time. No tool call on the first turn is correct here.
 - For mutation requests ("Move X to Y"), the agent should call get_show first to look up the show, then transition_show. Either tool as the first call is acceptable.
-- For refusal cases (deleting a show, skipping statuses, fabricating data), refusing without a tool call is acceptable; calling get_show first to provide a more informative refusal is also acceptable.
+- For refusal cases (deleting a show, skipping statuses, fabricating data), refusing without a tool call is correct. The agent may optionally call get_show first to provide a more informative refusal, but this is not required.
 
-User prompt: {{input}}
+User prompt: {input}
 Agent's first tool call (and arguments):
-{{tool_calls}}
+{tool_calls}
 
 Score 1 if the agent's first move was reasonable per the rules above. Score 0 if it called a wrong tool, called a correct tool with bad arguments (e.g. wrong section name for list_shows_by_field), or called a mutation tool when the request didn't authorize one.
 
-Return strict JSON: {"label": "correct" | "wrong", "score": 1 | 0, "explanation": "<one sentence>"}
+Return strict JSON: {"label": "correct" | "incorrect", "score": 1 | 0, "explanation": "<one sentence>"}
 ```
 
 ---
@@ -162,6 +205,10 @@ Return strict JSON: {"label": "correct" | "wrong", "score": 1 | 0, "explanation"
 ### Evaluator 3: `response_quality`
 
 **Purpose:** Catch poor writing in agent responses. Important: this judge does NOT verify factual accuracy — assume facts are correct (that's `evidence_grounded`'s job) and only judge the writing.
+
+**Scope:** Trace — pairs `{input}` (root span) with `{output}` (final response span). Could in theory be span-scoped on the root LLM span if both attributes are present there, but trace is the more reliable binding across Arize versions.
+
+**Optimization direction:** Maximize — score `1` means good writing.
 
 ```
 Rate ONLY the clarity and writing quality of this assistant response.
@@ -172,10 +219,10 @@ The agent being evaluated is the ADHOC Drone Show Manager. Its design rules — 
 - During create/transition flows it collects required fields ONE QUESTION AT A TIME.
 - It cannot delete shows or do bulk operations; refusing those is correct.
 
-User prompt: {{input}}
+User prompt: {input}
 
 Assistant response:
-{{output}}
+{output}
 
 SCOPE — judge ONLY the writing. Do NOT judge:
 - whether the facts are accurate or retrieved from a tool (a separate evaluator handles groundedness — ASSUME all factual content is correct and properly sourced)
@@ -214,7 +261,7 @@ For the demo:
 
 Our REPL currently uses **per-workflow** trace boundaries (one trace per detected workflow — see `agent/drone_show_agent.py:_INTAKE_MARKERS`). This is great for navigability in Arize but it means a 16-turn create-show conversation becomes ONE trace with 16 nested turns.
 
-Online evaluators will score that as a single unit, with `{{input}}` being the first user message of the workflow and `{{output}}` being the agent's final response. That can hide intra-workflow issues — e.g., a great final response after 15 confusing intake questions.
+Online evaluators will score that as a single unit, with `{input}` being the first user message of the workflow and `{output}` being the agent's final response. That can hide intra-workflow issues — e.g., a great final response after 15 confusing intake questions.
 
 **Two ways to handle this:**
 

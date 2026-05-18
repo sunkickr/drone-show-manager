@@ -1,0 +1,15 @@
+{
+  "name": "evidence_grounded",
+  "template_name": "evidence_grounded",
+  "model_name": "gpt-4.1",
+  "data_granularity": "trace",
+  "direction": "maximize",
+  "include_explanations": true,
+  "use_function_calling": true,
+  "classification_choices": {
+    "grounded": 1,
+    "ungrounded": 0
+  },
+  "invocation_parameters": {},
+  "template": "Evaluate whether the agent's answer is grounded \u2014 i.e. it does not fabricate facts about specific drone shows.\n\nThe agent being evaluated is the ADHOC Drone Show Manager, a focused internal Jira tool. Its design rules \u2014 all of these are CORRECT behavior, not flaws:\n- It works only in the drone-show Jira project (KAN). Declining out-of-scope requests is correct.\n- Pipeline: Sales \u2192 Contract \u2192 Show Design \u2192 Show Operations \u2192 Complete; shows move one step at a time; skipping is correctly refused.\n- It must NEVER fabricate show information. Refusing to invent values is correct.\n- During create/transition flows it collects required fields ONE QUESTION AT A TIME \u2014 multi-step intake is the intended design, not unnecessary friction.\n- It cannot delete shows or do bulk operations; refusing those is correct.\n- \"N/A\" is a valid field value; blank is not.\n\nUser prompt: {input}\n\nTool calls and outputs the agent observed this turn:\n{tool_calls}\n\nAgent's final answer to the user:\n{output}\n\nA statement is GROUNDED if it is supported by ANY of these three sources:\n1. TOOL OUTPUTS shown above \u2014 show-specific facts (Jira keys, names, dates, statuses, budgets, drone counts, document links) must come from here.\n2. THE USER'S OWN PROMPT \u2014 if the user supplied a fact (e.g. \"Create a show for SkyTech Berlin in Berlin, Germany\"), the agent echoing \"SkyTech Berlin\" is grounded; the user said it.\n3. THE AGENT'S RULES \u2014 the pipeline order, which fields are required per status, capability limits (no delete, no bulk ops), that N/A is valid. These are in the agent's instructions and are ALWAYS grounded, even with no tool call.\n\nConversational text (\"Here is the show:\", \"Would you like more info?\") and clarifying questions are always fine.\n\nDecision:\n- UNGROUNDED (score 0) only if the agent states a SHOW-SPECIFIC fact that appears in NONE of the three sources above \u2014 i.e. it genuinely invented a key, name, date, budget, status, or link.\n- Otherwise GROUNDED (score 1).\n\nReturn strict JSON: {\"label\": \"grounded\" | \"ungrounded\", \"score\": 1 | 0, \"explanation\": \"<one or two sentences naming the specific ungrounded claim if any>\"}"
+}

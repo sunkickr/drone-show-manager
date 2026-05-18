@@ -10,3 +10,4 @@ __pycache__/
 build/
 dist/
 evals/result_*.csv
+screenshots/
