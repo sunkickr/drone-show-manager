@@ -63,12 +63,20 @@ def fetch_dataset_prompts():
 
 
 def run_one(agent, test_id, prompt):
-    with trace(workflow_name=f"dataset_smoke:{test_id}"):
+    # Pass input via metadata so EnrichingTracingProcessor lifts it onto the
+    # workflow span as input.value. Mutate the same dict in place to add the
+    # final output before the trace closes — the processor reads metadata at
+    # on_trace_end time, and since the dict is shared by reference, this
+    # carries through to output.value.
+    metadata = {"input": prompt}
+    with trace(workflow_name=f"dataset_smoke:{test_id}", metadata=metadata):
         try:
             result = Runner.run_sync(agent, [{"role": "user", "content": prompt}])
         except Exception as e:
             return f"<exception: {type(e).__name__}: {e}>"
-    return (getattr(result, "final_output", "") or "")
+        final = getattr(result, "final_output", "") or ""
+        metadata["output"] = final
+    return final
 
 
 def main():

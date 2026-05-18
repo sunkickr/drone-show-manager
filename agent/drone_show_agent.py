@@ -135,21 +135,30 @@ def run():
     agent = build_agent()
     history = []
     workflow_ctx = None
+    workflow_metadata = None
     workflow_name_set = False
     print("ADHOC Drone Show Manager (type 'exit' to quit)\n")
 
-    def open_workflow_if_needed():
-        nonlocal workflow_ctx, workflow_name_set
+    def open_workflow_if_needed(user_message):
+        nonlocal workflow_ctx, workflow_metadata, workflow_name_set
         if workflow_ctx is None:
-            workflow_ctx = trace(workflow_name="user request")
+            # Build metadata up front so EnrichingTracingProcessor sees
+            # `input` on on_trace_start. We hold a reference to the same
+            # dict so close_workflow can mutate `output` before the trace
+            # closes — the processor reads metadata at on_trace_end.
+            workflow_metadata = {"input": user_message}
+            workflow_ctx = trace(workflow_name="user request", metadata=workflow_metadata)
             workflow_ctx.__enter__()
             workflow_name_set = False
 
-    def close_workflow():
-        nonlocal workflow_ctx, workflow_name_set
+    def close_workflow(final_output=None):
+        nonlocal workflow_ctx, workflow_metadata, workflow_name_set
         if workflow_ctx is not None:
+            if final_output and workflow_metadata is not None:
+                workflow_metadata["output"] = final_output
             workflow_ctx.__exit__(None, None, None)
             workflow_ctx = None
+            workflow_metadata = None
             workflow_name_set = False
             # Compact history at workflow boundaries: drop all tool calls
             # and tool outputs (the dominant source of context-window bloat
@@ -176,11 +185,11 @@ def run():
 
     try:
         # Opening greeting
-        open_workflow_if_needed()
+        open_workflow_if_needed("Hello")
         history.append({"role": "user", "content": "Hello"})
-        completed, _ = _run_turn(agent, history, rename_workflow)
+        completed, _, final = _run_turn(agent, history, rename_workflow)
         if completed:
-            close_workflow()
+            close_workflow(final_output=final)
 
         while True:
             try:
@@ -193,11 +202,11 @@ def run():
             if user_input.lower() in {"exit", "quit"}:
                 return
 
-            open_workflow_if_needed()
+            open_workflow_if_needed(user_input)
             history.append({"role": "user", "content": user_input})
-            completed, _ = _run_turn(agent, history, rename_workflow)
+            completed, _, final = _run_turn(agent, history, rename_workflow)
             if completed:
-                close_workflow()
+                close_workflow(final_output=final)
     finally:
         # Make sure any open trace closes cleanly on exit / exception.
         close_workflow()
@@ -206,9 +215,12 @@ def run():
 def _run_turn(agent, history, on_first_tool=None):
     """Run one turn; print tool activity and final answer.
 
-    Returns (workflow_complete, first_tool_name).
-    workflow_complete is True when a mutation tool fired OR the agent's final
-    answer doesn't look like a follow-up question.
+    Returns (workflow_complete, first_tool_name, final_text).
+    workflow_complete is True when a mutation tool fired OR the agent's
+    final answer doesn't look like a follow-up question. final_text is
+    the agent's user-facing response for this turn; the caller lifts it
+    onto the workflow span's output.value via trace.metadata when the
+    workflow closes.
     """
     result = Runner.run_sync(agent, history)
 
@@ -248,7 +260,7 @@ def _run_turn(agent, history, on_first_tool=None):
         complete = True
     else:
         complete = not _looks_like_followup(final)
-    return complete, first_tool
+    return complete, first_tool, final
 
 
 _MAX_HISTORY_MESSAGES = 10

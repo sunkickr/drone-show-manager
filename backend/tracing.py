@@ -27,7 +27,8 @@ def init_tracing():
         from opentelemetry.sdk.resources import Resource
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
         from opentelemetry import trace as otel_trace
-        from openinference.instrumentation.openai_agents import OpenAIAgentsInstrumentor
+        from openinference.instrumentation.openai_agents._processor import OpenInferenceTracingProcessor
+        from agents import set_trace_processors
     except ImportError as e:
         print(f"[tracing] Arize libraries not installed ({e}); skipping.")
         return False
@@ -53,7 +54,41 @@ def init_tracing():
     tracer_provider.add_span_processor(BatchSpanProcessor(exporter))
     otel_trace.set_tracer_provider(tracer_provider)
 
-    OpenAIAgentsInstrumentor().instrument(tracer_provider=tracer_provider)
+    tracer = tracer_provider.get_tracer("openinference.instrumentation.openai_agents")
+
+    class EnrichingTracingProcessor(OpenInferenceTracingProcessor):
+        """Lift trace.metadata['input'] and ['output'] onto the workflow span.
+
+        The OpenAI Agents SDK and the OpenInference instrumentor sit on
+        separate context systems, so writing input/output via OTel directly
+        is a no-op (we tried). Instead we subclass the processor that
+        actually creates the OTel root span and write the attributes here,
+        in the same place the span lives. Without this the workflow span
+        has empty input.value / output.value and Arize evaluators' {input}
+        / {output} variables fall back to inconsistent descendant spans —
+        which produced false positives like adv_15.
+        """
+
+        def on_trace_start(self, trace_):
+            super().on_trace_start(trace_)
+            otel_span = self._root_spans.get(trace_.trace_id)
+            if otel_span is None:
+                return
+            meta = trace_.metadata or {}
+            value = meta.get("input")
+            if isinstance(value, str) and value:
+                otel_span.set_attribute("input.value", value)
+
+        def on_trace_end(self, trace_):
+            otel_span = self._root_spans.get(trace_.trace_id)
+            if otel_span is not None:
+                meta = trace_.metadata or {}
+                value = meta.get("output")
+                if isinstance(value, str) and value:
+                    otel_span.set_attribute("output.value", value)
+            super().on_trace_end(trace_)
+
+    set_trace_processors([EnrichingTracingProcessor(tracer)])
 
     print(
         f"[tracing] Arize AX active — project '{project_name}' "
