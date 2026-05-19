@@ -94,6 +94,75 @@ In Arize, each experiment shows up as a row in the project's experiments table w
 3. Run experiment B with a new `--experiment-name`
 4. Open the experiments table → select both → diff view shows per-row score deltas
 
+## Iterating on live evaluators
+
+The online evaluators in `online_evals.md` are configured in the Arize UI and score every live trace as it arrives. When you tighten one, the next agent run usually surfaces mis-scores you have to diagnose and resolve. The loop below is the workflow we used to do that.
+
+### The loop
+
+1. **Run live smoke tests.** Each prompt fires as its own trace named `dataset_smoke:<test_id>`.
+
+   ```bash
+   .venv/bin/python tests/dataset_smoke_test.py <dataset_name>
+   ```
+
+2. **Wait for async eval scoring.** Arize scores new traces asynchronously — typically 1-2 minutes after the trace lands. If a trace shows zero entries in `evaluations`, the scoring hasn't run yet.
+
+3. **Fetch traces + eval results.** Use `ax spans export` and parse the `evaluations` array on the root span.
+
+   ```bash
+   ax spans export "drone-show-manager" \
+     --space "$ARIZE_SPACE_ID" \
+     --filter "name = 'dataset_smoke:<test_id>'" \
+     --days 1 -l 5 --stdout | python3 -c "
+   import sys, json
+   spans = sorted(json.load(sys.stdin), key=lambda s: s['start_time'], reverse=True)
+   for e in spans[0].get('evaluations', []):
+       print(f'{e[\"name\"]:<20} {e[\"label\"]:<12} ({e[\"score\"]})')
+       print(f'  {e[\"explanation\"][:200]}\n')
+   "
+   ```
+
+4. **Decide if the agent or the judge is wrong.** Compare the trace's `output.value` to the judge's `explanation`:
+   - Does the agent's response actually violate the rule the judge cites? → **agent bug** (fix the system prompt or tool behavior).
+   - Does the judge's explanation contradict itself, or quote content not in the response? → **judge bug** (often instrumentation; see the prerequisite below).
+   - Does the judge apply a stricter standard than its prompt describes? → **judge prompt needs tightening**.
+
+5. **Update the evaluator.** Edit `evals/evaluators/<name>.json` and push a new version:
+
+   ```bash
+   python3 -c "
+   import json, subprocess
+   cfg = json.load(open('evals/evaluators/<name>.json'))
+   subprocess.run(['ax', 'evaluators', 'create-template-evaluator-version', cfg['name'],
+       '--space', '$ARIZE_SPACE_ID',
+       '--commit-message', 'describe what changed',
+       '--template-name', cfg['template_name'],
+       '--template', cfg['template'],
+       '--ai-integration-id', '$ARIZE_OPENAI_INTEGRATION_ID',
+       '--model-name', cfg['model_name'],
+       '--data-granularity', cfg['data_granularity'],
+       '--direction', cfg['direction'],
+       '--classification-choices', json.dumps(cfg['classification_choices']),
+       *(['--include-explanations'] if cfg['include_explanations'] else []),
+       *(['--use-function-calling'] if cfg['use_function_calling'] else []),
+   ])"
+   ```
+
+   Versions are immutable — the latest becomes active automatically. Past versions stay queryable via `ax evaluators list-versions`. Find your AI integration ID via `ax ai-integrations list --space "$ARIZE_SPACE_ID"`.
+
+Then re-run the smoke test and repeat until scores stabilize.
+
+### Prerequisite: workflow-span enrichment
+
+This loop assumes the `EnrichingTracingProcessor` in `backend/tracing.py` is active. Without it, trace-scoped `{output}` resolution falls back to inconsistent descendant spans — producing what look like judge bugs but are actually instrumentation issues. If you're seeing self-contradictory judge explanations, or judges referencing data the agent never produced, verify `attributes.output.value` is set on the workflow root span before iterating on the judge prompt.
+
+### Tips
+
+- The judge's `explanation` is the strongest debug signal. Internal contradictions ("the agent claimed X is true... the agent's response omitted X entirely") almost always mean the judge saw different data than you expected.
+- Patterns across tests (one judge scoring 0 on many traces) usually point at the judge; one-off failures usually point at the agent.
+- Keep `evals/evaluators/<name>.json` as the source of truth. Commit JSON changes alongside the `create-template-evaluator-version` push so the repo and Arize stay in sync.
+
 ## Extending
 
 - Add a new dataset row → append to `EXAMPLES` in `dataset.py`, re-run
