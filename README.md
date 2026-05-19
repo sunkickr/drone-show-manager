@@ -4,6 +4,60 @@ A terminal chat agent that helps ADHOC manage drone shows in Jira. Built as an M
 
 The agent uses OpenAI models, the Jira REST API, and the OpenAI Agents SDK. Every step is traced to Arize AX so you can observe and evaluate it.
 
+## Architecture
+
+```
+                          ┌──────────────────────┐
+                          │  User (terminal)     │
+                          │  $ python main.py    │
+                          └──────────┬───────────┘
+                                     │  user message
+                                     ▼
+                ┌──────────────────────────────────────┐
+                │   agent/drone_show_agent.run()        │
+                │   • Workflow-trace lifecycle          │
+                │   • Tool-call streaming to stderr     │
+                └──────────────┬───────────────────────┘
+                               │
+                               ▼
+      ┌─────────────────────────────────────────────────────────┐
+      │       OpenAI Agents SDK Agent  —  gpt-4.1-mini          │
+      │  System prompt: pipeline rules · mandatory lookup ·     │
+      │                 refusal structure · field→section map   │
+      └──┬──────────┬────────────────┬──────────────┬─────────┬─┘
+         │          │                │              │         │
+         ▼          ▼                ▼              ▼         ▼
+      ┌─────┐  ┌──────┐  ┌────────────────────┐  ┌──────┐  ┌────────────┐
+      │list_│  │ get_ │  │ list_shows_by_     │  │create│  │ transition │
+      │shows│  │ show │  │ field              │  │ show*│  │ show*      │
+      └──┬──┘  └──┬───┘  └─────────┬──────────┘  └──┬───┘  └──────┬─────┘
+         └────────┴────────────────┴────────────────┴─────────────┘
+                                   │
+                                   ▼
+              ┌──────────────────────────────────────────────┐
+              │  backend/                                    │
+              │   jira_client.py  — REST wrapper             │
+              │   show_format.py  — parser + writer          │
+              │   show_schema.py  — rubric (source of truth) │
+              └──────────────────┬───────────────────────────┘
+                                 │  HTTPS
+                                 ▼
+                       ┌────────────────────┐
+                       │   Jira Cloud       │
+                       │   project KAN      │
+                       └────────────────────┘
+
+   Observability — branches off every Agent / LLM / Tool span:
+     OpenInference instrumentation  →  Arize AX
+        ├─ Online LLM judges score live traces (evals/online_evals.md)
+        ├─ Offline experiments via evals/run_experiment.py (dataset → run → score)
+        └─ Prompt Playground tests prompt variants against the dataset
+
+   * mutates Jira state — guarded by adjacency + required-field checks
+```
+
+The agent is one reasoning loop that picks one of five tools per turn. Two of them (`create_show`, `transition_show`) mutate Jira state and are guarded by the schema in `backend/show_schema.py` — the LLM never decides whether a transition is valid; the schema does. Everything else flows through the same backend layer that knows how to parse and write Jira description blocks (three formats supported: plain `Field: value`, split-line, and Jira wiki markup).
+
 ## Setup
 
 ```bash
