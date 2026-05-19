@@ -58,8 +58,18 @@ Each section's field list lives in `backend/show_schema.SECTION_FIELDS`. To ente
 | `list_shows`          | `status: str \| None`                                         |
 | `get_show`            | `query: str`                                                  |
 | `list_shows_by_field` | `section: str, field: str, value: str \| None, status: str \| None` |
-| `create_show`         | `fields: dict`                                                |
+| `create_show`         | `summary: str, fields: dict`                                  |
 | `transition_show`     | `key: str, target_status: str, new_fields: dict \| None`      |
+
+### Tool return conventions
+
+Tools return self-describing dicts. `get_show` returns one of:
+
+- `{"status": "found", "show": {...}}` — single match
+- `{"status": "ambiguous", "query": ..., "candidates": [...], "message": ...}` — 2+ summary matches
+- `{"status": "not_found", "query": ..., "message": ...}` — no match
+
+The `status` field is the agent's branching signal. The `message` field exists so trace consumers (evaluators, log readers) can understand the outcome without knowing tool-specific schema. Mutating tools (`create_show`, `transition_show`) return `{"created": {...}}` / `{"transitioned": {...}}` on success or `{"error": ..., "missing": [...]}` on validation failure.
 
 ## Environment variables
 
@@ -78,13 +88,20 @@ Each section's field list lives in `backend/show_schema.SECTION_FIELDS`. To ente
 
 ## Evals (development workflow)
 
-`evals/` implements the Arize development workflow — see `evals/README.md` for full usage. Quick orientation:
+`evals/` implements both the Arize development workflow (offline experiments) and the observability workflow (live/online evaluators). See `evals/README.md` for full usage. Quick orientation:
 
 ```
 evals/
-├── dataset.py          13-row dataset (PRD verification prompts + rubric columns)
-├── evaluators.py       7 evaluators (3 code, 4 LLM/hybrid) + shared AGENT_RULES block
-└── run_experiment.py   snapshot board → run agent over dataset → score → restore board
+├── dataset.py                 13-row offline dataset (PRD prompts + rubric columns)
+├── evaluators.py              7 offline evaluators (3 code, 4 LLM/hybrid)
+├── run_experiment.py          snapshot → run agent → score → restore (offline)
+├── online_evals.md            full templates for the 3 trace-scoped judges in Arize
+├── evaluators/                eval-as-code: canonical JSON per online evaluator
+│   ├── evidence_grounded.json
+│   ├── right_tool_chosen.json
+│   └── response_quality.json
+└── adversarial_tests.json     15 adversarial prompts uploaded as dataset
+                                drone_show_manager_adversarial_v1
 ```
 
 Key design points:
@@ -94,6 +111,7 @@ Key design points:
 - **Each judge has one narrow job.** `evidence_grounded` judges only fabrication (with tool outputs as evidence); `response_quality` judges only writing clarity (explicitly told to *assume* facts are correct). Scope creep between judges was the main calibration bug during development.
 - **The experiment runner is board-safe.** It snapshots all tickets before the run and restores them after — the `mutation` row (Lisbon → Complete) is reverted automatically.
 - **Task functions must be async.** Arize's `run_experiment` manages its own asyncio loop; the task awaits `Runner.run` (not `Runner.run_sync`). The task parameter must be named `dataset_row` — Arize binds by parameter name.
+- **Online evaluators are eval-as-code.** The three trace-scoped judges configured in Arize (`evidence_grounded`, `right_tool_chosen`, `response_quality`) have their canonical definitions in `evals/evaluators/*.json`. Updates flow file → `ax evaluators create-template-evaluator-version`. See the "Iterating on live evaluators" section in `evals/README.md` for the five-step iteration loop.
 
 ## Where to extend
 
@@ -102,7 +120,9 @@ Key design points:
 - **New eval row**: append to `EXAMPLES` in `evals/dataset.py`.
 - **New evaluator**: write a function returning `EvaluationResult`, add it to `EVALUATORS` in `evals/evaluators.py`.
 - **Frontend**: `frontend/` is reserved. A later iteration will likely add a thin FastAPI server that wraps the same `agent.drone_show_agent.run()` entry point used by `main.py`.
-- **Online evals**: the `evaluators.py` functions can be pointed at live traces fetched from Arize — the next step for the observability workflow.
+- **Online evaluator update**: edit `evals/evaluators/<name>.json`, push via `ax evaluators create-template-evaluator-version`. Keep the JSON file as source of truth; commit alongside the push.
+- **New adversarial test**: append to `evals/adversarial_tests.json` and re-upload as a new dataset version, OR add to the existing `drone_show_manager_adversarial_v1` dataset via the Arize UI.
+- **Agent-to-Alyx prototype**: `prototype/alyx_fix.py` demonstrates the proposed `ax alyx fix` CLI for autonomous evaluator iteration. See `prototype/README.md`.
 
 ## Smoke test pattern
 
@@ -112,7 +132,7 @@ Key design points:
 2. For each test case: open a named trace, send the prompt, run `Runner.run_sync`, assert against `must_contain` / `must_not_contain`.
 3. In a `finally` block: `restore_board(snapshot)` deletes new tickets, reverts status transitions, restores descriptions.
 
-This pattern is the obvious base for v2 evals — replace the string assertions with an LLM judge and the same skeleton becomes a regression harness.
+`tests/dataset_smoke_test.py` is the dataset-driven variant: takes a dataset name as a CLI argument (e.g. `drone_show_manager_v2` or `drone_show_manager_adversarial_v1`), fetches the prompts from Arize via `ax datasets export`, and runs them through the same snapshot/restore pattern. Used for adversarial-test runs and for the live-evaluator iteration loop.
 
 ## Tracing groupings
 
@@ -141,3 +161,11 @@ This means:
 - An ambiguous lookup that requires clarification ("Tell me about Spain show" → "Which one would you like?") = one trace spanning both turns
 
 The first tool the agent calls inside a workflow renames the trace via `span.update_name()` so it's immediately identifiable in Arize.
+
+### Workflow-span enrichment
+
+The OpenAI Agents SDK's `agents.trace()` doesn't populate `input.value` or `output.value` on the workflow's OTel root span — without help, those attributes are empty and Arize evaluators' trace-scoped `{input}` / `{output}` variables fall back to inconsistent descendant spans. `backend/tracing.py` defines `EnrichingTracingProcessor`, a subclass of `OpenInferenceTracingProcessor` that reads `trace.metadata["input"]` and `trace.metadata["output"]` and writes them onto the OTel root span at `on_trace_start` / `on_trace_end`. Callers pass metadata when opening a trace; the REPL and the smoke-test drivers both do this. Without the processor, trace-scoped evaluators produce false positives (see `evals/online_evals.md` for the failure pattern).
+
+### History compaction at workflow boundaries
+
+The REPL loop compacts `history` when a workflow closes — discarding all tool calls and tool outputs, capping the surviving user/assistant text messages at `_MAX_HISTORY_MESSAGES = 10` (in `agent/drone_show_agent.py`). This prevents context-window bloat across long sessions (which previously degraded the model into punctuation-only responses) while preserving enough conversational history for pronoun resolution ("move it to show design" referring to a show discussed a few workflows ago).
