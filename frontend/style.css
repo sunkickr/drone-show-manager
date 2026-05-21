@@ -173,41 +173,48 @@ body.state-empty .composer {
 }
 
 /* ─── Show list ───────────────────────────────────────────────
-   A multi-row list of shows renders as one bordered box that shows
-   ~4 rows then scrolls internally, so a long list (e.g. "who are the
-   sales people") doesn't flood the chat. */
+   A multi-card list of shows renders inside one bordered box that shows
+   ~4 cards then scrolls internally on its OWN scrollbar, so a long list
+   (e.g. "who are the sales people") doesn't flood the main chat scroll.
+   The scrollbar is styled to always show — macOS overlay scrollbars are
+   invisible until you scroll, which hides the affordance otherwise. */
 .show-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 252px;        /* ~4 cards + gaps + padding; rest scroll */
+  overflow-y: scroll;       /* always reserve the scrollbar gutter */
+  padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.show-list .card-small {
+  flex: 0 0 auto;           /* don't let cards shrink to fit */
+}
+
+/* Always-visible custom scrollbar (WebKit: Chrome/Safari/Edge). */
+.show-list::-webkit-scrollbar {
+  width: 10px;
+}
+.show-list::-webkit-scrollbar-track {
   background: var(--surface);
-  overflow: hidden;
+  border-radius: 8px;
+}
+.show-list::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 8px;
+  border: 2px solid var(--surface);
+}
+.show-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
 }
 
-.show-list-header {
-  padding: 9px 16px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border);
-}
-
-.show-list-body {
-  max-height: 208px;   /* ~4 rows; the rest scroll */
-  overflow-y: auto;
-}
-
-/* Cards become flush list rows inside the box (dividers, no individual
-   border/radius/background). */
-.show-list-body .card-small {
-  border: none;
-  border-radius: 0;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-}
-
-.show-list-body .card-small:last-child {
-  border-bottom: none;
+/* Firefox */
+.show-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) var(--surface);
 }
 
 /* ─── Small card ─────────────────────────────────────────── */

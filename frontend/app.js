@@ -77,17 +77,7 @@ function renderCard(card) {
 function renderShowList(cards) {
   const box = document.createElement('div');
   box.className = 'show-list';
-
-  const header = document.createElement('div');
-  header.className = 'show-list-header';
-  header.textContent = `${cards.length} shows`;
-
-  const body = document.createElement('div');
-  body.className = 'show-list-body';
-  for (const card of cards) body.appendChild(renderSmallCard(card));
-
-  box.appendChild(header);
-  box.appendChild(body);
+  for (const card of cards) box.appendChild(renderSmallCard(card));
   return box;
 }
 

@@ -56,6 +56,18 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
+@app.middleware("http")
+async def no_cache_static(request, call_next):
+    # The frontend is iterated frequently; without this, browsers serve a
+    # stale cached index.html / app.js / style.css and UI changes silently
+    # don't appear. no-cache forces a revalidation on every load.
+    response = await call_next(request)
+    path = request.url.path
+    if path == "/" or path.startswith("/static"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
+
 class ChatRequest(BaseModel):
     session_id: str
     message: str
