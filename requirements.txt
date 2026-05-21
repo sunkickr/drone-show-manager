@@ -5,3 +5,5 @@ openinference-instrumentation-openai-agents
 arize-otel
 python-dotenv
 pytest
+fastapi
+uvicorn[standard]

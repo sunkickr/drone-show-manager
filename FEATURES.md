@@ -62,3 +62,22 @@
 - Skill file (`prototype/SKILL.md`) documents agent-side invocation; can be installed as a Claude Code skill by copying into `.claude/skills/`
 - **Caveat**: this is a prototype, not the real feature. The real `ax alyx fix` would live inside Arize with platform-internal access to evaluator state, variable resolution, and update endpoints. The prototype works from `ax` CLI output plus a system prompt.
 - **Verified state**: script parses, runs against live Arize traces, fetches evaluator JSON, produces structured analysis. Full demo loop (smoke → analyze → `--apply` → re-run) works end-to-end when all of `ARIZE_SPACE_ID`, `OPENAI_API_KEY`, and the `ax` CLI are configured.
+
+## 4. Web chat UI (MVP)
+
+**Description**: Single-page dark-themed chat frontend for the drone show manager, served by a thin FastAPI app. Same agent and same Arize trace lifecycle as the terminal REPL — both surfaces share `AgentSession`, so one trace covers each user workflow even when it spans multiple HTTP requests. Show results render as inline cards inside the chat: a small card per row for list results, and a big card with section-grouped fields for `get_show` that highlights any fields blocking the next status transition.
+
+**Location**: `backend/web.py`, `agent/session.py`, `frontend/` (`index.html`, `app.js`, `style.css`), `.replit`
+
+**Details**:
+- **Stack**: FastAPI + vanilla HTML/JS, no framework. One Python service, one deploy.
+- **Shared lifecycle**: `agent/session.py:AgentSession` extracts the trace lifecycle that previously lived in `drone_show_agent.run()` closures. The REPL was refactored to use it; the web uses it with `workflow_prefix="frontend:"`. No duplicated lifecycle code.
+- **Trace per workflow, not per request**: a multi-turn create/transition flow stays in one Arize trace until the agent's reply no longer demands more input or a mutation tool fires. Same boundary detection as the REPL (`_INTAKE_MARKERS`, `MUTATION_TOOLS`).
+- **`frontend:` workflow-name prefix**: web traces are filterable in Arize and don't mix with `smoke:` / `dataset_smoke:` traces in evaluator analyses.
+- **Cards as a side-channel**: server walks `result.new_items`, shapes the latest tool outputs into a `cards: []` array next to the agent's text. The agent's text — and therefore `output.value` on the workflow span — is unchanged, so the three live evaluators (`evidence_grounded`, `right_tool_chosen`, `response_quality`) score web traffic with the same templates as REPL traffic.
+- **Card kinds**: `small` (key/summary/status, with `highlight: created|transitioned` for mutation confirmations) and `big` (full `show` payload from `get_show`, with `missing_for_next_status` fields highlighted).
+- **Greeting + chips**: on session open, the server sends `"Hello"` through the agent and returns the system-prompt greeting plus four hardcoded example chips that match the prompt's bullets. Chips disappear after the first user message.
+- **Intake**: agent behavior unchanged — fields are still collected one at a time during create/transition flows. Forms-in-chat is explicit v2.
+- **Hosting**: `.replit` invokes `uvicorn backend.web:app --host 0.0.0.0 --port $PORT`. Sessions live in memory (single-process). Replit Secrets supply API keys.
+- **Theme**: dark graphite background, off-white text, accent on post-mutation pills and missing-field labels. Inspired by adhoccreativehouse.com. No images, no icons in MVP.
+- **Verified state**: REPL still works (`python main.py`); backend serves locally (`uvicorn backend.web:app --reload`); existing unit tests pass.

@@ -119,7 +119,7 @@ Key design points:
 - **New required field**: add to `SECTION_FIELDS` in `backend/show_schema.py`. All downstream validation picks it up automatically.
 - **New eval row**: append to `EXAMPLES` in `evals/dataset.py`.
 - **New evaluator**: write a function returning `EvaluationResult`, add it to `EVALUATORS` in `evals/evaluators.py`.
-- **Frontend**: `frontend/` is reserved. A later iteration will likely add a thin FastAPI server that wraps the same `agent.drone_show_agent.run()` entry point used by `main.py`.
+- **Frontend**: `frontend/` ships a single-page chat UI (vanilla HTML/JS) served by `backend/web.py`. Extend by adding card kinds in `extract_cards()` and matching renderers in `frontend/app.js`.
 - **Online evaluator update**: edit `evals/evaluators/<name>.json`, push via `ax evaluators create-template-evaluator-version`. Keep the JSON file as source of truth; commit alongside the push.
 - **New adversarial test**: append to `evals/adversarial_tests.json` and re-upload as a new dataset version, OR add to the existing `drone_show_manager_adversarial_v1` dataset via the Arize UI.
 - **Agent-to-Alyx prototype**: `prototype/alyx_fix.py` demonstrates the proposed `ax alyx fix` CLI for autonomous evaluator iteration. See `prototype/README.md`.
@@ -143,12 +143,13 @@ Trace boundaries are set per **user workflow**, not per turn:
 | Surface                       | Trace boundary                          | Workflow name in Arize                                  |
 |-------------------------------|------------------------------------------|---------------------------------------------------------|
 | `python main.py`              | One trace per detected workflow         | Dynamically set from the first tool the agent calls — `list_shows`, `get_show`, `create_show`, `transition_show`, etc. |
+| `uvicorn backend.web:app`     | One trace per session workflow (NOT per HTTP request) | Same as REPL but prefixed `frontend:` — `frontend:list_shows`, `frontend:get_show`, … |
 | `python tests/smoke_test.py`  | One trace per test case                  | `smoke:01_list_contract`, `smoke:02_list_sales`, …      |
 | `python tests/verify_workflow_traces.py` | One trace per scenario        | Workflow is renamed after the first tool call           |
 
 ### How workflow boundaries are detected
 
-The REPL loop in `agent/drone_show_agent.py` opens a new trace when no workflow is currently active, and closes it when the agent's last response indicates the workflow is done:
+The shared `AgentSession` in `agent/session.py` opens a new trace when no workflow is currently active, and closes it when the agent's last response indicates the workflow is done:
 
 - **Close immediately** if a mutation tool (`create_show` or `transition_show`) fired successfully — the workflow accomplished its goal.
 - **Keep open** if the agent's last paragraph contains a structured-input demand: `"what is the …"`, `"please provide"`, `"which one would you like"`, etc. (See `_INTAKE_MARKERS` in `drone_show_agent.py` for the full list.)
@@ -164,8 +165,20 @@ The first tool the agent calls inside a workflow renames the trace via `span.upd
 
 ### Workflow-span enrichment
 
-The OpenAI Agents SDK's `agents.trace()` doesn't populate `input.value` or `output.value` on the workflow's OTel root span — without help, those attributes are empty and Arize evaluators' trace-scoped `{input}` / `{output}` variables fall back to inconsistent descendant spans. `backend/tracing.py` defines `EnrichingTracingProcessor`, a subclass of `OpenInferenceTracingProcessor` that reads `trace.metadata["input"]` and `trace.metadata["output"]` and writes them onto the OTel root span at `on_trace_start` / `on_trace_end`. Callers pass metadata when opening a trace; the REPL and the smoke-test drivers both do this. Without the processor, trace-scoped evaluators produce false positives (see `evals/online_evals.md` for the failure pattern).
+The OpenAI Agents SDK's `agents.trace()` doesn't populate `input.value` or `output.value` on the workflow's OTel root span — without help, those attributes are empty and Arize evaluators' trace-scoped `{input}` / `{output}` variables fall back to inconsistent descendant spans. `backend/tracing.py` defines `EnrichingTracingProcessor`, a subclass of `OpenInferenceTracingProcessor` that reads `trace.metadata["input"]` and `trace.metadata["output"]` and writes them onto the OTel root span at `on_trace_start` / `on_trace_end`. `AgentSession` passes metadata when opening a trace and mutates the same dict with `output` before close; the REPL, the web frontend, and the smoke-test drivers all flow through it. Without the processor, trace-scoped evaluators produce false positives (see `evals/online_evals.md` for the failure pattern).
 
 ### History compaction at workflow boundaries
 
-The REPL loop compacts `history` when a workflow closes — discarding all tool calls and tool outputs, capping the surviving user/assistant text messages at `_MAX_HISTORY_MESSAGES = 10` (in `agent/drone_show_agent.py`). This prevents context-window bloat across long sessions (which previously degraded the model into punctuation-only responses) while preserving enough conversational history for pronoun resolution ("move it to show design" referring to a show discussed a few workflows ago).
+`AgentSession._close()` compacts `history` when a workflow closes — discarding all tool calls and tool outputs, capping the surviving user/assistant text messages at `_MAX_HISTORY_MESSAGES = 10` (in `agent/drone_show_agent.py`). This prevents context-window bloat across long sessions (which previously degraded the model into punctuation-only responses) while preserving enough conversational history for pronoun resolution ("move it to show design" referring to a show discussed a few workflows ago).
+
+## Frontend / web surface
+
+`backend/web.py` is a FastAPI app that serves the chat UI from `frontend/` and exposes two routes: `POST /api/session` (mint a session, send `"Hello"` through the agent, return greeting + four example chips) and `POST /api/chat` (run one turn on an existing session). Each session holds one `AgentSession(workflow_prefix="frontend:")`. The REPL and the web are two surfaces over the same lifecycle code — there is no duplicated trace-lifecycle logic.
+
+Show cards are a **server side-channel**, not part of the agent's text response. After each turn, the server walks `result.new_items` and shapes the latest tool outputs into a `cards: []` array shipped alongside the agent's text. This deliberately keeps `output.value` on the workflow span identical to what the REPL produces, so the three live evaluators (`evidence_grounded`, `right_tool_chosen`, `response_quality`) score web traffic with the same templates as REPL traffic — no eval re-templating required.
+
+Card kinds:
+- **small** — for list rows (`list_shows`, `list_shows_by_field`) and post-mutation confirmations (`create_show`, `transition_show`). Renders `{key, summary, status}`. Post-mutation cards carry `highlight: "created" | "transitioned"` so the UI accents the new status pill.
+- **big** — for `get_show` results with `status: found`. Ships the full `show` payload (sections, next_status, missing_for_next_status) and the frontend highlights the fields blocking the next status transition.
+
+The session registry is in-memory (`sessions: dict[str, AgentSession]`). The MVP runs as a single Replit process so this is sufficient; a Vercel-style serverless deploy would need an external store.
