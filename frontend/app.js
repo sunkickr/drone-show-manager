@@ -103,104 +103,282 @@ function renderSmallCard(card) {
   el.appendChild(summary);
   el.appendChild(status);
 
-  // Click a card to ask about that show — typing still works too.
+  // Click a card to open its editable form card — typing still works too.
   if (show.key) {
     el.classList.add('card-clickable');
-    el.title = `Tell me about ${show.key}`;
-    el.addEventListener('click', () => sendMessage(`Tell me about ${show.key}`));
+    el.title = `Open ${show.key}`;
+    el.addEventListener('click', () => openShowCard(show.key));
   }
   return el;
 }
 
+async function openShowCard(key) {
+  if (busy) return;
+  setBusy(true);
+  renderThinking();
+  try {
+    const res = await fetch(`/api/show/${encodeURIComponent(key)}`);
+    clearThinking();
+    if (!res.ok) {
+      renderAgent(`Couldn't open ${key}.`, []);
+      return;
+    }
+    const data = await res.json();
+    renderAgent('', [{ kind: 'big', show: data.show }]);
+  } catch (err) {
+    clearThinking();
+    renderAgent(`Error: ${err.message}`, []);
+  } finally {
+    setBusy(false);
+  }
+}
+
+// The big card is the editable show form. It owns local UI state (edit mode,
+// which sections are expanded) and re-renders itself in place on every change.
 function renderBigCard(card) {
-  const show = card.show || {};
   const el = document.createElement('div');
   el.className = 'card card-big';
+  const state = { editing: false, expanded: new Set(), error: null, show: card.show || {} };
+  rebuildBigCard(el, state);
+  return el;
+}
+
+function rebuildBigCard(el, state) {
+  const show = state.show;
+  el.innerHTML = '';
+  el.classList.toggle('card-editing', state.editing);
 
   const header = document.createElement('div');
   header.className = 'card-big-header';
-
   const keyEl = document.createElement('div');
   keyEl.className = 'card-big-key';
   keyEl.textContent = show.key || '';
-
   const summaryEl = document.createElement('div');
   summaryEl.className = 'card-big-summary';
   summaryEl.textContent = show.summary || '';
-
   const statusEl = document.createElement('div');
   statusEl.className = 'card-big-status';
   statusEl.textContent = show.next_status
     ? `${show.status || ''} → ${show.next_status}`
     : (show.status || '');
-
-  header.appendChild(keyEl);
-  header.appendChild(summaryEl);
-  header.appendChild(statusEl);
+  header.append(keyEl, summaryEl, statusEl);
   el.appendChild(header);
 
-  const missingBySection = {};
-  for (const m of (show.missing_for_next_status || [])) {
-    if (!missingBySection[m.section]) missingBySection[m.section] = new Set();
-    missingBySection[m.section].add(m.field);
+  for (const sec of (show.form || [])) {
+    el.appendChild(renderFormSection(el, state, sec));
   }
 
-  const sections = show.sections || {};
-  const sectionNames = [...new Set([
-    ...Object.keys(sections),
-    ...Object.keys(missingBySection),
-  ])];
-
-  for (const sectionName of sectionNames) {
-    const sectionEl = document.createElement('div');
-    sectionEl.className = 'card-section';
-
-    const label = document.createElement('div');
-    label.className = 'card-section-label';
-    label.textContent = sectionName;
-    sectionEl.appendChild(label);
-
-    const fields = sections[sectionName] || {};
-    const missing = missingBySection[sectionName] || new Set();
-
-    for (const [field, value] of Object.entries(fields)) {
-      sectionEl.appendChild(renderField(field, value, missing.has(field), false));
-    }
-    for (const field of missing) {
-      if (Object.prototype.hasOwnProperty.call(fields, field)) continue;
-      sectionEl.appendChild(renderField(field, '', true, true));
-    }
-
-    el.appendChild(sectionEl);
+  if (state.error) {
+    const err = document.createElement('div');
+    err.className = 'card-error';
+    err.textContent = state.error;
+    el.appendChild(err);
   }
 
-  return el;
+  const actions = document.createElement('div');
+  actions.className = 'card-big-actions';
+  if (state.editing) {
+    actions.appendChild(cardButton('Save changes', 'btn-primary', () => saveEdits(el, state)));
+    actions.appendChild(cardButton('Cancel', 'btn-ghost', () => {
+      state.editing = false;
+      state.error = null;
+      rebuildBigCard(el, state);
+    }));
+  } else {
+    const hint = document.createElement('span');
+    hint.className = 'card-edit-hint';
+    hint.textContent = 'Click to edit';
+    actions.appendChild(hint);
+    if (show.next_status) {
+      const ready = (show.missing_for_next_status || []).length === 0;
+      const trans = cardButton(`Transition to ${show.next_status}`, 'btn-primary', () => doTransition(el, state));
+      trans.disabled = !ready;
+      trans.title = ready ? '' : 'Fill all required fields and save first';
+      actions.appendChild(trans);
+    }
+  }
+  el.appendChild(actions);
+
+  // View mode: clicking the card (not a section toggle or button) enters edit
+  // mode and expands sections that still need information.
+  el.onclick = state.editing ? null : (e) => {
+    if (e.target.closest('.card-section-head') || e.target.closest('button')) return;
+    state.editing = true;
+    state.error = null;
+    for (const sec of (show.form || [])) {
+      if (sec.has_missing) state.expanded.add(sec.section);
+    }
+    rebuildBigCard(el, state);
+  };
 }
 
-function renderField(name, value, isMissing, isBlank) {
-  const el = document.createElement('div');
-  el.className = 'card-field';
-  if (isMissing) el.classList.add('card-field-missing');
+function renderFormSection(el, state, sec) {
+  const wrap = document.createElement('div');
+  wrap.className = 'card-section';
+  const expanded = state.expanded.has(sec.section);
+
+  const head = document.createElement('button');
+  head.type = 'button';
+  head.className = 'card-section-head';
+  if (sec.has_missing) head.classList.add('section-missing');
+
+  const chevron = document.createElement('span');
+  chevron.className = 'card-section-chevron';
+  chevron.textContent = expanded ? '▾' : '▸';
+
+  const title = document.createElement('span');
+  title.className = 'card-section-title';
+  title.textContent = sec.section.toUpperCase();
+
+  head.append(chevron, title);
+  if (sec.has_missing) {
+    const badge = document.createElement('span');
+    badge.className = 'card-section-badge';
+    badge.textContent = 'missing info';
+    head.appendChild(badge);
+  }
+  head.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (expanded) state.expanded.delete(sec.section);
+    else state.expanded.add(sec.section);
+    rebuildBigCard(el, state);
+  });
+  wrap.appendChild(head);
+
+  if (expanded) {
+    const body = document.createElement('div');
+    body.className = 'card-section-body';
+    for (const fld of sec.fields) {
+      body.appendChild(state.editing ? renderFieldInput(sec.section, fld) : renderFieldView(fld));
+    }
+    wrap.appendChild(body);
+  }
+  return wrap;
+}
+
+function renderFieldView(fld) {
+  const row = document.createElement('div');
+  row.className = 'card-field';
+  if (fld.missing) row.classList.add('card-field-missing');
 
   const label = document.createElement('span');
   label.className = 'card-field-label';
-  label.textContent = name;
+  label.textContent = fld.name;
+  row.append(label, document.createTextNode(': '));
 
-  el.appendChild(label);
-  el.appendChild(document.createTextNode(': '));
-
-  if (isBlank) {
+  if (fld.value) {
+    const v = document.createElement('span');
+    v.className = 'card-field-value';
+    v.textContent = fld.value;
+    row.appendChild(v);
+  } else if (fld.missing) {
     const tag = document.createElement('span');
     tag.className = 'card-field-tag';
     tag.textContent = 'missing';
-    el.appendChild(tag);
+    row.appendChild(tag);
   } else {
-    const v = document.createElement('span');
-    v.className = 'card-field-value';
-    v.textContent = value;
-    el.appendChild(v);
+    const dash = document.createElement('span');
+    dash.className = 'card-field-empty';
+    dash.textContent = '—';
+    row.appendChild(dash);
   }
-  return el;
+  return row;
+}
+
+function renderFieldInput(section, fld) {
+  const row = document.createElement('label');
+  row.className = 'card-field-edit';
+  if (fld.missing) row.classList.add('card-field-missing');
+
+  const label = document.createElement('span');
+  label.className = 'card-field-label';
+  label.textContent = fld.name;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'card-field-input';
+  input.value = fld.value || '';
+  input.dataset.section = section;
+  input.dataset.field = fld.name;
+  if (fld.missing) input.placeholder = 'required for next status';
+
+  row.append(label, input);
+  return row;
+}
+
+function cardButton(text, cls, onclick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = `card-btn ${cls}`;
+  b.textContent = text;
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onclick();
+  });
+  return b;
+}
+
+function disableCardActions(el) {
+  el.querySelectorAll('.card-big-actions button').forEach((b) => { b.disabled = true; });
+}
+
+async function saveEdits(el, state) {
+  const fields = {};
+  el.querySelectorAll('.card-field-input').forEach((inp) => {
+    const val = inp.value.trim();
+    if (!val) return;
+    const sec = inp.dataset.section;
+    if (!fields[sec]) fields[sec] = {};
+    fields[sec][inp.dataset.field] = val;
+  });
+
+  state.error = null;
+  disableCardActions(el);
+  try {
+    const res = await fetch(`/api/show/${encodeURIComponent(state.show.key)}/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      state.error = data.error || `Save failed (${res.status})`;
+      rebuildBigCard(el, state);
+      return;
+    }
+    state.show = data.updated;
+    state.editing = false;
+    rebuildBigCard(el, state);
+  } catch (err) {
+    state.error = err.message;
+    rebuildBigCard(el, state);
+  }
+}
+
+async function doTransition(el, state) {
+  const target = state.show.next_status;
+  if (!target) return;
+  state.error = null;
+  disableCardActions(el);
+  try {
+    const res = await fetch(`/api/show/${encodeURIComponent(state.show.key)}/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_status: target }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      state.error = data.error || `Transition failed (${res.status})`;
+      rebuildBigCard(el, state);
+      return;
+    }
+    state.show = data.show;
+    state.expanded = new Set();
+    rebuildBigCard(el, state);
+  } catch (err) {
+    state.error = err.message;
+    rebuildBigCard(el, state);
+  }
 }
 
 function renderChips(examples) {

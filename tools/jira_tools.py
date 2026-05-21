@@ -20,32 +20,11 @@ from backend.show_schema import (
     next_status,
     is_adjacent_transition,
 )
+# Shared with the web form; defined in the service so both surfaces emit the
+# same show shape (see backend/show_service.py).
+from backend.show_service import summarize as _summarize, parsed_show as _parsed_show
 
 ISSUE_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]+-\d+$")
-
-
-def _summarize(issue):
-    """Return {key, summary, status} from a raw Jira issue dict."""
-    f = jira_client.issue_fields(issue)
-    return {"key": f["key"], "summary": f["summary"], "status": f["status"]}
-
-
-def _parsed_show(issue):
-    """Return {key, summary, status, sections, missing_for_next}."""
-    f = jira_client.issue_fields(issue)
-    sections = parse_description(f["description"])
-    nxt = next_status(f["status"])
-    missing = missing_fields_for(sections, nxt) if nxt else []
-    return {
-        "key": f["key"],
-        "summary": f["summary"],
-        "status": f["status"],
-        "sections": sections,
-        "next_status": nxt,
-        "missing_for_next_status": [
-            {"section": s, "field": fld} for s, fld in missing
-        ],
-    }
 
 
 # ---------------------------------------------------------------------------

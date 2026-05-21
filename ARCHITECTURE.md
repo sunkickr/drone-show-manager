@@ -182,3 +182,23 @@ Card kinds:
 - **big** — for `get_show` results with `status: found`. Ships the full `show` payload (sections, next_status, missing_for_next_status) and the frontend highlights the fields blocking the next status transition.
 
 The session registry is in-memory (`sessions: dict[str, AgentSession]`). The MVP runs as a single Replit process so this is sufficient; a Vercel-style serverless deploy would need an external store.
+
+### Show edit & transition form (web-only)
+
+The large show card is an editable form. `backend/show_service.py` is a thin service layer shared by the agent tools and the web form:
+
+- `summarize` / `parsed_show` — the canonical show shapes. **Moved here from `tools/jira_tools.py`**, which now imports them, so the agent tools and the web form emit identical show JSON (no duplicated shape-builders). Dependency direction is correct: `tools/` → `backend/`.
+- `fetch_show(key)`, `update_show_fields(key, fields)`, `transition_show_status(key, target)` — read / write / advance, all going through `show_format` (description I/O) and `show_schema` (validation), per CLAUDE.md.
+- `form_sections(show)` — builds the web form model: each relevant section (populated OR required to advance) with every field, its value, and a `missing` flag.
+
+Three web endpoints in `backend/web.py` drive the form. They are **not** agent turns and deliberately open **no Arize trace** — they're deterministic CRUD, not LLM reasoning:
+
+| Endpoint | Purpose | Refuses when |
+|----------|---------|--------------|
+| `GET /api/show/{key}` | parsed show + form model | key not found (404) |
+| `POST /api/show/{key}/update` | merge non-blank fields, persist | unknown section/field name |
+| `POST /api/show/{key}/transition` | advance one status | not adjacent, or required field for target still blank |
+
+**Field editing is a web-only capability.** The agent's contract (system prompt + CLAUDE.md) is explicitly create/transition-only and is unchanged — the form supplies user-typed values directly, which is not fabrication. Update and transition are always separate calls: the transition endpoint takes no field values and refuses while required fields are blank, so a show can't be updated and advanced in one move. The frontend mirrors this (the Transition button is disabled until `missing_for_next_status` is empty, which only clears after a successful save).
+
+`extract_cards` enriches `get_show` big cards with `form_sections` too, so a card opened by the agent ("tell me about Toronto") is the same editable form as one opened by clicking a small card.

@@ -311,24 +311,72 @@ body.state-empty .composer {
   white-space: nowrap;
 }
 
+/* Edit mode: highlight the whole card so it's clear you're editing. */
+.card-big.card-editing {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.card-big:not(.card-editing) {
+  cursor: pointer;
+}
+
+/* ─── Accordion sections ──────────────────────────────────── */
 .card-section {
-  margin-top: 14px;
+  border-top: 1px solid var(--border);
 }
-
 .card-section:first-of-type {
-  margin-top: 0;
+  border-top: none;
 }
 
-.card-section-label {
+.card-section-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 2px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.card-section-chevron {
+  color: var(--text-muted);
+  font-size: 11px;
+  width: 12px;
+}
+
+.card-section-title {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: var(--text-muted);
-  margin-bottom: 6px;
+  color: var(--text-dim);
 }
 
+.card-section-head.section-missing .card-section-title {
+  color: var(--text);
+}
+
+.card-section-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent-warn);
+  border: 1px solid var(--accent-warn);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.card-section-body {
+  padding: 2px 2px 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* ─── Fields (view) ───────────────────────────────────────── */
 .card-field {
-  padding: 3px 0;
   font-size: 14px;
   color: var(--text);
 }
@@ -339,6 +387,10 @@ body.state-empty .composer {
 
 .card-field-value {
   color: var(--text);
+}
+
+.card-field-empty {
+  color: var(--text-muted);
 }
 
 .card-field-missing .card-field-label {
@@ -354,6 +406,97 @@ body.state-empty .composer {
   border-radius: 4px;
   padding: 1px 6px;
   margin-left: 2px;
+}
+
+/* ─── Fields (edit) ───────────────────────────────────────── */
+.card-field-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.card-field-edit .card-field-label {
+  font-size: 12px;
+}
+
+.card-field-edit.card-field-missing .card-field-label {
+  color: var(--accent-warn);
+}
+
+.card-field-input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.card-field-input:focus {
+  outline: none;
+  border-color: var(--text-muted);
+}
+
+/* ─── Actions + errors ────────────────────────────────────── */
+.card-big-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.card-edit-hint {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.card-btn {
+  font-family: inherit;
+  font-size: 13px;
+  border-radius: 7px;
+  padding: 8px 14px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+.card-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.card-btn.btn-primary {
+  background: var(--accent);
+  color: #14140f;
+  border-color: var(--accent);
+}
+.card-btn.btn-primary:hover:not(:disabled) {
+  background: var(--text);
+}
+
+.card-btn.btn-ghost {
+  background: transparent;
+  color: var(--text-dim);
+}
+.card-btn.btn-ghost:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* Edit mode (Save first): right-align the button group. View mode uses the
+   hint's flex:1 to push the Transition button right. */
+.card-big-actions .card-btn:first-child {
+  margin-left: auto;
+}
+
+.card-error {
+  margin-top: 12px;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--accent-warn);
+  border: 1px solid var(--accent-warn);
+  border-radius: 6px;
 }
 
 /* ─── Composer ────────────────────────────────────────────── */

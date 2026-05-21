@@ -23,6 +23,7 @@ from pydantic import BaseModel
 load_dotenv(override=True)
 
 from agent.session import AgentSession  # noqa: E402  (after load_dotenv)
+from backend import show_service  # noqa: E402
 from backend.tracing import init_tracing  # noqa: E402
 
 
@@ -73,6 +74,19 @@ class ChatRequest(BaseModel):
     message: str
 
 
+class UpdateRequest(BaseModel):
+    fields: dict
+
+
+class TransitionRequest(BaseModel):
+    target_status: str
+
+
+def show_payload(parsed: dict) -> dict:
+    """A parsed show plus the web form model the editable big card renders."""
+    return {**parsed, "form": show_service.form_sections(parsed)}
+
+
 @app.post("/api/session")
 def create_session():
     # Mint a session and return the greeting from a constant — no agent call,
@@ -100,6 +114,41 @@ def chat(req: ChatRequest):
     }
 
 
+# ── Show form: read / update / transition (web-only, no agent / no trace) ──
+# Field editing is a UI capability the agent deliberately does not have. These
+# are deterministic CRUD over the same backend primitives the tools use; they
+# don't open an Arize trace because they aren't agent reasoning.
+
+@app.get("/api/show/{key}")
+def get_show_detail(key: str):
+    show = show_service.fetch_show(key)
+    if show is None:
+        raise HTTPException(status_code=404, detail=f"No show '{key}'")
+    return {"show": show_payload(show)}
+
+
+@app.post("/api/show/{key}/update")
+def update_show(key: str, req: UpdateRequest):
+    try:
+        result = show_service.update_show_fields(key, req.fields)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"No show '{key}'")
+    if "error" in result:
+        return result
+    return {"updated": show_payload(result["updated"])}
+
+
+@app.post("/api/show/{key}/transition")
+def transition_show(key: str, req: TransitionRequest):
+    try:
+        result = show_service.transition_show_status(key, req.target_status)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"No show '{key}'")
+    if "error" in result:
+        return result
+    return {"transitioned": result["transitioned"], "show": show_payload(result["show"])}
+
+
 @app.get("/")
 def index():
     return FileResponse(FRONTEND_DIR / "index.html")
@@ -125,7 +174,7 @@ def extract_cards(tool_calls: list[dict]) -> list[dict]:
             for show in out.get("shows", []):
                 cards.append({"kind": "small", "show": show})
         elif name == "get_show" and out.get("status") == "found":
-            cards.append({"kind": "big", "show": out["show"]})
+            cards.append({"kind": "big", "show": show_payload(out["show"])})
         elif name == "create_show" and "created" in out:
             cards.append({"kind": "small", "show": out["created"], "highlight": "created"})
         elif name == "transition_show" and "transitioned" in out:
