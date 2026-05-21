@@ -6,26 +6,28 @@
   <title>ADHOC Drone Show Manager</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body class="state-empty">
   <header class="topbar">
     <h1>ADHOC Drone Show Manager</h1>
   </header>
 
-  <main class="chat" id="chat">
-    <div class="messages" id="messages"></div>
-  </main>
+  <div class="stack" id="stack">
+    <main class="chat" id="chat">
+      <div class="messages" id="messages"></div>
+    </main>
 
-  <footer class="composer">
-    <form id="composer-form" autocomplete="off">
-      <input
-        type="text"
-        id="composer-input"
-        placeholder="Ask about a show, create one, or move one forward…"
-        autofocus
-      >
-      <button type="submit" id="composer-send">Send</button>
-    </form>
-  </footer>
+    <footer class="composer">
+      <form id="composer-form" autocomplete="off">
+        <input
+          type="text"
+          id="composer-input"
+          placeholder="Ask about a show, create one, or move one forward…"
+          autofocus
+        >
+        <button type="submit" id="composer-send">Send</button>
+      </form>
+    </footer>
+  </div>
 
   <script src="/static/app.js"></script>
 </body>

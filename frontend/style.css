@@ -44,6 +44,13 @@ body {
   color: var(--text-dim);
 }
 
+.stack {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .chat {
   flex: 1;
   overflow-y: auto;
@@ -57,6 +64,43 @@ body {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+/* ─── Empty state: greeting + composer centered in the viewport ─── */
+body.state-empty .stack {
+  justify-content: center;
+}
+
+body.state-empty .chat {
+  flex: 0 0 auto;
+  overflow: visible;
+  padding-bottom: 18px;
+}
+
+body.state-empty .messages {
+  align-items: center;
+}
+
+body.state-empty .msg-agent {
+  width: auto;
+  align-self: center;
+}
+
+body.state-empty .msg-agent .msg-text {
+  background: transparent;
+  border: none;
+  text-align: center;
+  font-size: 18px;
+  color: var(--text);
+}
+
+body.state-empty .chips {
+  justify-content: center;
+}
+
+body.state-empty .composer {
+  border-top: none;
+  background: transparent;
 }
 
 .msg {
@@ -128,6 +172,44 @@ body {
   margin-top: 12px;
 }
 
+/* ─── Show list ───────────────────────────────────────────────
+   A multi-row list of shows renders as one bordered box that shows
+   ~4 rows then scrolls internally, so a long list (e.g. "who are the
+   sales people") doesn't flood the chat. */
+.show-list {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.show-list-header {
+  padding: 9px 16px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.show-list-body {
+  max-height: 208px;   /* ~4 rows; the rest scroll */
+  overflow-y: auto;
+}
+
+/* Cards become flush list rows inside the box (dividers, no individual
+   border/radius/background). */
+.show-list-body .card-small {
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+}
+
+.show-list-body .card-small:last-child {
+  border-bottom: none;
+}
+
 /* ─── Small card ─────────────────────────────────────────── */
 .card-small {
   display: grid;
@@ -138,6 +220,16 @@ body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+
+.card-small.card-clickable {
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.card-small.card-clickable:hover {
+  background: var(--surface-2);
+  border-color: var(--text-muted);
 }
 
 .card-small-key {

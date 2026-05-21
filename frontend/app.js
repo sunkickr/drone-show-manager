@@ -6,6 +6,7 @@ const sendBtn = document.getElementById('composer-send');
 
 let sessionId = null;
 let chipsShown = false;
+let busy = false;
 
 async function init() {
   setBusy(true);
@@ -50,7 +51,16 @@ function renderAgent(text, cards) {
   if (cards && cards.length) {
     const cardsEl = document.createElement('div');
     cardsEl.className = 'cards';
-    for (const card of cards) cardsEl.appendChild(renderCard(card));
+    // A multi-row list of plain show cards becomes one scrollable show-list
+    // element (shows ~4 rows, scrolls for the rest). Single results, big
+    // cards, and post-mutation highlighted cards render standalone.
+    const isShowList =
+      cards.length >= 2 && cards.every((c) => c.kind === 'small' && !c.highlight);
+    if (isShowList) {
+      cardsEl.appendChild(renderShowList(cards));
+    } else {
+      for (const card of cards) cardsEl.appendChild(renderCard(card));
+    }
     el.appendChild(cardsEl);
   }
 
@@ -62,6 +72,23 @@ function renderCard(card) {
   if (card.kind === 'small') return renderSmallCard(card);
   if (card.kind === 'big') return renderBigCard(card);
   return document.createElement('div');
+}
+
+function renderShowList(cards) {
+  const box = document.createElement('div');
+  box.className = 'show-list';
+
+  const header = document.createElement('div');
+  header.className = 'show-list-header';
+  header.textContent = `${cards.length} shows`;
+
+  const body = document.createElement('div');
+  body.className = 'show-list-body';
+  for (const card of cards) body.appendChild(renderSmallCard(card));
+
+  box.appendChild(header);
+  box.appendChild(body);
+  return box;
 }
 
 function renderSmallCard(card) {
@@ -85,6 +112,13 @@ function renderSmallCard(card) {
   el.appendChild(key);
   el.appendChild(summary);
   el.appendChild(status);
+
+  // Click a card to ask about that show — typing still works too.
+  if (show.key) {
+    el.classList.add('card-clickable');
+    el.title = `Tell me about ${show.key}`;
+    el.addEventListener('click', () => sendMessage(`Tell me about ${show.key}`));
+  }
   return el;
 }
 
@@ -217,7 +251,9 @@ function clearThinking() {
 }
 
 async function sendMessage(text) {
-  if (!text || !sessionId) return;
+  if (!text || !sessionId || busy) return;
+  document.body.classList.remove('state-empty');
+  document.body.classList.add('state-active');
   setBusy(true);
   renderUser(text);
   renderThinking();
@@ -244,9 +280,10 @@ async function sendMessage(text) {
   }
 }
 
-function setBusy(busy) {
-  input.disabled = busy;
-  sendBtn.disabled = busy;
+function setBusy(value) {
+  busy = value;
+  input.disabled = value;
+  sendBtn.disabled = value;
 }
 
 function scrollToBottom() {

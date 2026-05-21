@@ -28,8 +28,12 @@ from backend.tracing import init_tracing  # noqa: E402
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
-# The four example chips shown beside the opening greeting. Hardcoded to match
-# the system prompt's bullets — parsing the agent's prose would be fragile.
+# The opening greeting and four example chips. Hardcoded to match the system
+# prompt's bullets — parsing the agent's prose would be fragile, and rendering
+# a constant lets the UI show the greeting instantly without an agent round-trip
+# on page load. If the system prompt's greeting changes, update this to match.
+GREETING = "I'm the ADHOC Drone Show Manager. What would you like to do?"
+
 EXAMPLES = [
     "Which shows are in Contract?",
     "Tell me about the Toronto show",
@@ -59,14 +63,15 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/session")
 def create_session():
+    # Mint a session and return the greeting from a constant — no agent call,
+    # so the UI paints the greeting + example chips immediately. The agent runs
+    # for the first time on the user's first real message (one trace per
+    # workflow, starting at that message rather than a throwaway "Hello").
     session_id = uuid.uuid4().hex
-    session = AgentSession(workflow_prefix="frontend:")
-    sessions[session_id] = session
-    turn = session.send("Hello")
+    sessions[session_id] = AgentSession(workflow_prefix="frontend:")
     return {
         "session_id": session_id,
-        "text": turn["text"],
-        "cards": extract_cards(turn["tool_calls"]),
+        "text": GREETING,
         "examples": EXAMPLES,
     }
 
