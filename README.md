@@ -4,7 +4,7 @@ A chat agent that helps ADHOC manage drone shows in Jira. Ships with two front e
 
 The agent uses OpenAI models, the Jira REST API, and the OpenAI Agents SDK. Every step is traced to Arize AX so you can observe and evaluate it.
 
-![ADHOC Drone Show Manager web UI — chat with show-list cards and an editable show card showing collapsed sections, MISSING INFO badges, and Save/Cancel controls](screenshots/web-ui.png)
+![ADHOC Drone Show Manager web UI — chat with show-list cards and an editable show card showing collapsed sections, MISSING INFO badges, and Save/Cancel controls](frontend/assets/web-ui.png)
 
 ## Architecture
 
@@ -149,7 +149,7 @@ Each smoke test prompt is wrapped in its own named trace (`smoke:01_list_contrac
 
 When `ARIZE_SPACE_ID` and `ARIZE_API_KEY` are set, every turn, tool call, and OpenAI call shows up as a span in Arize AX under the project named in `ARIZE_PROJECT_NAME` (default `drone-show-manager`).
 
-![Arize AX trace view — workflow traces with nested Agent / LLM / Tool spans and their inputs and outputs](screenshots/arize-traces.png)
+![Arize AX trace view — workflow traces with nested Agent / LLM / Tool spans and their inputs and outputs](frontend/assets/arize-traces.png)
 
 *Each user workflow is one trace; expanding it shows the nested Agent → LLM → Tool spans with the input that opened the workflow and the final output, which the live evaluators score.*
 
