@@ -175,6 +175,31 @@ def _print_turn(turn):
 _MAX_HISTORY_MESSAGES = 10
 
 
+def _message_text(content):
+    """Extract plain text from a message's content.
+
+    The Agents SDK's to_input_list() returns Responses-API format, where
+    message content is a LIST of typed parts (e.g. {"type": "output_text",
+    "text": "..."} for the assistant, {"type": "input_text", ...} for the
+    user) — not a plain string. Earlier code assumed a string and silently
+    dropped every list-content message, which wiped history to nothing after
+    a single turn. Handle both shapes.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+            elif isinstance(part, str):
+                parts.append(part)
+        return " ".join(parts)
+    return ""
+
+
 def _compact_history(history):
     """Drop tool exchanges and cap conversation history to the most recent
     user/assistant text messages.
@@ -187,9 +212,10 @@ def _compact_history(history):
 
     The user/assistant text messages carry the conversational thread —
     which show is being discussed, what the user just asked. We keep up
-    to _MAX_HISTORY_MESSAGES of these so the agent has multi-turn context
-    for pronoun resolution ("move it to show design" referring to a show
-    discussed a few workflows ago) without growing unbounded.
+    to _MAX_HISTORY_MESSAGES of these (normalized to plain {role, content}
+    strings) so the agent has multi-turn context for pronoun resolution
+    ("move it to show design" referring to a show discussed a few turns
+    ago) without growing unbounded.
     """
     def field(obj, key):
         return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
@@ -199,10 +225,10 @@ def _compact_history(history):
         role = field(msg, "role")
         if role not in ("user", "assistant"):
             continue
-        content = field(msg, "content")
-        if not isinstance(content, str) or not content.strip():
+        text = _message_text(field(msg, "content")).strip()
+        if not text:
             continue
-        kept.append({"role": role, "content": content})
+        kept.append({"role": role, "content": text})
         if len(kept) >= _MAX_HISTORY_MESSAGES:
             break
 

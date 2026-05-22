@@ -62,8 +62,11 @@ class AgentSession:
                 tool_calls[-1]["output"] = _parse_tool_output(raw)
 
         final = getattr(result, "final_output", None) or ""
-        self.history.clear()
-        self.history.extend(result.to_input_list())
+        # Rebind rather than clear()+extend(): result.to_input_list() reconstructs
+        # from the list we passed to Runner.run_sync, so clearing self.history
+        # first would drop the original input items (the user message) from the
+        # reconstructed list.
+        self.history = result.to_input_list()
 
         complete = mutation_fired or not _looks_like_followup(final)
         if complete:
