@@ -1,10 +1,11 @@
 """Drone Show Manager — OpenAI Agents SDK agent definition and terminal run loop."""
 
+import json
 import os
 import sys
 from datetime import date
 
-from agents import Agent, Runner, trace
+from agents import Agent
 
 from tools.jira_tools import TOOLS
 
@@ -126,73 +127,21 @@ def run():
     """Terminal REPL with per-workflow tracing.
 
     Each user-facing workflow (a single lookup, or a multi-turn create/transition
-    flow) is wrapped in its own Arize trace. The trace closes when either:
-      (a) the agent successfully calls a mutation tool (create_show / transition_show), or
-      (b) the agent gives a final answer that doesn't read like a follow-up question.
-
-    The workflow's name is set dynamically from the first tool the agent calls in
-    the workflow (e.g. `create_show`, `get_show`). If no tool is called, the name
-    falls back to the user's intent (`chat`).
+    flow) is wrapped in its own Arize trace via AgentSession. The trace closes
+    when either:
+      (a) the agent calls a mutation tool (create_show / transition_show), or
+      (b) the agent's final answer doesn't read like a follow-up question.
     """
-    agent = build_agent()
-    history = []
-    workflow_ctx = None
-    workflow_metadata = None
-    workflow_name_set = False
+    # Imported here, not at module top, so backend/web.py can import the
+    # building blocks from this module without circular imports through
+    # agent/session.py.
+    from agent.session import AgentSession
+
+    session = AgentSession()
     print("ADHOC Drone Show Manager (type 'exit' to quit)\n")
 
-    def open_workflow_if_needed(user_message):
-        nonlocal workflow_ctx, workflow_metadata, workflow_name_set
-        if workflow_ctx is None:
-            # Build metadata up front so EnrichingTracingProcessor sees
-            # `input` on on_trace_start. We hold a reference to the same
-            # dict so close_workflow can mutate `output` before the trace
-            # closes — the processor reads metadata at on_trace_end.
-            workflow_metadata = {"input": user_message}
-            workflow_ctx = trace(workflow_name="user request", metadata=workflow_metadata)
-            workflow_ctx.__enter__()
-            workflow_name_set = False
-
-    def close_workflow(final_output=None):
-        nonlocal workflow_ctx, workflow_metadata, workflow_name_set
-        if workflow_ctx is not None:
-            if final_output and workflow_metadata is not None:
-                workflow_metadata["output"] = final_output
-            workflow_ctx.__exit__(None, None, None)
-            workflow_ctx = None
-            workflow_metadata = None
-            workflow_name_set = False
-            # Compact history at workflow boundaries: drop all tool calls
-            # and tool outputs (the dominant source of context-window bloat
-            # that previously degraded the model into punctuation-only
-            # responses), and cap the surviving user/assistant text turns
-            # at _MAX_HISTORY_MESSAGES so multi-turn pronoun references
-            # like "move it to show design" still resolve even after an
-            # unrelated query in between.
-            _compact_history(history)
-
-    def rename_workflow(name):
-        """Set the workflow span's name on the first tool call of this trace."""
-        nonlocal workflow_name_set
-        if workflow_name_set or workflow_ctx is None:
-            return
-        # Look up the current span and update its name attribute. Works across
-        # OTel SDK versions because span.update_name is the standard API.
-        try:
-            from opentelemetry import trace as otel_trace
-            otel_trace.get_current_span().update_name(name)
-        except Exception:
-            pass
-        workflow_name_set = True
-
     try:
-        # Opening greeting
-        open_workflow_if_needed("Hello")
-        history.append({"role": "user", "content": "Hello"})
-        completed, _, final = _run_turn(agent, history, rename_workflow)
-        if completed:
-            close_workflow(final_output=final)
-
+        _print_turn(session.send("Hello"))
         while True:
             try:
                 user_input = input("\n> ").strip()
@@ -203,69 +152,52 @@ def run():
                 continue
             if user_input.lower() in {"exit", "quit"}:
                 return
-
-            open_workflow_if_needed(user_input)
-            history.append({"role": "user", "content": user_input})
-            completed, _, final = _run_turn(agent, history, rename_workflow)
-            if completed:
-                close_workflow(final_output=final)
+            _print_turn(session.send(user_input))
     finally:
-        # Make sure any open trace closes cleanly on exit / exception.
-        close_workflow()
+        session.close()
 
 
-def _run_turn(agent, history, on_first_tool=None):
-    """Run one turn; print tool activity and final answer.
-
-    Returns (workflow_complete, first_tool_name, final_text).
-    workflow_complete is True when a mutation tool fired OR the agent's
-    final answer doesn't look like a follow-up question. final_text is
-    the agent's user-facing response for this turn; the caller lifts it
-    onto the workflow span's output.value via trace.metadata when the
-    workflow closes.
-    """
-    result = Runner.run_sync(agent, history)
-
-    mutation_fired = False
-    first_tool = None
-    for item in getattr(result, "new_items", []):
-        kind = type(item).__name__
-        if kind == "ToolCallItem":
-            tool_name = getattr(getattr(item, "raw_item", None), "name", "?")
-            args = getattr(getattr(item, "raw_item", None), "arguments", "")
-            args_preview = (args[:120] + "…") if isinstance(args, str) and len(args) > 120 else args
-            print(f"  → tool: {tool_name}({args_preview})", file=sys.stderr)
-            if first_tool is None:
-                first_tool = tool_name
-                if on_first_tool:
-                    on_first_tool(tool_name)
-            if tool_name in MUTATION_TOOLS:
-                mutation_fired = True
-        elif kind == "ToolCallOutputItem":
-            output = str(getattr(item, "output", ""))
-            preview = output[:120] + ("…" if len(output) > 120 else "")
-            print(f"  ← {preview}", file=sys.stderr)
-
-    final = getattr(result, "final_output", None) or ""
+def _print_turn(turn):
+    """Render an AgentSession turn result for the terminal REPL."""
+    for call in turn["tool_calls"]:
+        args = call.get("args", "")
+        args_preview = (args[:120] + "…") if isinstance(args, str) and len(args) > 120 else args
+        print(f"  → tool: {call['name']}({args_preview})", file=sys.stderr)
+        output = call.get("output")
+        output_str = output if isinstance(output, str) else json.dumps(output, default=str)
+        preview = output_str[:120] + ("…" if len(output_str) > 120 else "")
+        print(f"  ← {preview}", file=sys.stderr)
     print("\n" + "─" * 60)
-    print(final)
+    print(turn["text"])
     print("─" * 60)
-
-    new_input = result.to_input_list()
-    history.clear()
-    history.extend(new_input)
-
-    # A workflow is "done" if a mutation succeeded, OR the agent's reply
-    # doesn't look like it's still asking the user for something.
-    if mutation_fired:
-        # Confirm tool didn't return an error; treat any successful call as done
-        complete = True
-    else:
-        complete = not _looks_like_followup(final)
-    return complete, first_tool, final
 
 
 _MAX_HISTORY_MESSAGES = 10
+
+
+def _message_text(content):
+    """Extract plain text from a message's content.
+
+    The Agents SDK's to_input_list() returns Responses-API format, where
+    message content is a LIST of typed parts (e.g. {"type": "output_text",
+    "text": "..."} for the assistant, {"type": "input_text", ...} for the
+    user) — not a plain string. Earlier code assumed a string and silently
+    dropped every list-content message, which wiped history to nothing after
+    a single turn. Handle both shapes.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+            elif isinstance(part, str):
+                parts.append(part)
+        return " ".join(parts)
+    return ""
 
 
 def _compact_history(history):
@@ -280,9 +212,10 @@ def _compact_history(history):
 
     The user/assistant text messages carry the conversational thread —
     which show is being discussed, what the user just asked. We keep up
-    to _MAX_HISTORY_MESSAGES of these so the agent has multi-turn context
-    for pronoun resolution ("move it to show design" referring to a show
-    discussed a few workflows ago) without growing unbounded.
+    to _MAX_HISTORY_MESSAGES of these (normalized to plain {role, content}
+    strings) so the agent has multi-turn context for pronoun resolution
+    ("move it to show design" referring to a show discussed a few turns
+    ago) without growing unbounded.
     """
     def field(obj, key):
         return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
@@ -292,10 +225,10 @@ def _compact_history(history):
         role = field(msg, "role")
         if role not in ("user", "assistant"):
             continue
-        content = field(msg, "content")
-        if not isinstance(content, str) or not content.strip():
+        text = _message_text(field(msg, "content")).strip()
+        if not text:
             continue
-        kept.append({"role": role, "content": content})
+        kept.append({"role": role, "content": text})
         if len(kept) >= _MAX_HISTORY_MESSAGES:
             break
 

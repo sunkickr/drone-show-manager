@@ -1,22 +1,34 @@
 # Drone Show Manager (Jira Bot)
 
-A terminal chat agent that helps ADHOC manage drone shows in Jira. Built as an MVP to test out the workflow before adding a web frontend.
+A chat agent that helps ADHOC manage drone shows in Jira. Ships with two front ends — a terminal REPL (`python main.py`) and a dark-themed web chat (`uvicorn backend.web:app`) — that share one agent and one Arize trace lifecycle.
 
 The agent uses OpenAI models, the Jira REST API, and the OpenAI Agents SDK. Every step is traced to Arize AX so you can observe and evaluate it.
+
+![ADHOC Drone Show Manager web UI — chat with show-list cards and an editable show card showing collapsed sections, MISSING INFO badges, and Save/Cancel controls](screenshots/web-ui.png)
 
 ## Architecture
 
 ```
-                          ┌──────────────────────┐
-                          │  User (terminal)     │
-                          │  $ python main.py    │
-                          └──────────┬───────────┘
-                                     │  user message
+        ┌──────────────────────┐      ┌────────────────────────────────┐
+        │  User (terminal)     │      │  User (browser)                │
+        │  $ python main.py    │      │  http://localhost:8000         │
+        └──────────┬───────────┘      └───────────────┬────────────────┘
+                   │ stdin/stdout                      │ POST /api/session
+                   │                                   │ POST /api/chat
+                   ▼                                   ▼
+        ┌──────────────────────┐      ┌────────────────────────────────┐
+        │ agent/drone_show_     │      │ backend/web.py (FastAPI)       │
+        │ agent.run()           │      │ • serves frontend/ (HTML/JS)   │
+        │ • prints to stderr    │      │ • cards side-channel           │
+        └──────────┬───────────┘      └───────────────┬────────────────┘
+                   │                                   │  prefix "frontend:"
+                   └─────────────────┬─────────────────┘
                                      ▼
                 ┌──────────────────────────────────────┐
-                │   agent/drone_show_agent.run()        │
-                │   • Workflow-trace lifecycle          │
-                │   • Tool-call streaming to stderr     │
+                │   agent/session.py  AgentSession      │
+                │   • one Arize trace per workflow      │
+                │   • workflow-boundary detection       │
+                │   • history compaction at close       │
                 └──────────────┬───────────────────────┘
                                │
                                ▼
@@ -56,6 +68,8 @@ The agent uses OpenAI models, the Jira REST API, and the OpenAI Agents SDK. Ever
    * mutates Jira state — guarded by adjacency + required-field checks
 ```
 
+Both front ends — the terminal REPL and the FastAPI web app — converge on `agent/session.py:AgentSession`, which owns the Arize trace lifecycle (one trace per user workflow, not per turn). The web app adds a `frontend:` prefix to workflow names so its traces are filterable in Arize, and ships show cards as a side-channel alongside the agent's text without altering the text itself.
+
 The agent is one reasoning loop that picks one of five tools per turn. Two of them (`create_show`, `transition_show`) mutate Jira state and are guarded by the schema in `backend/show_schema.py` — the LLM never decides whether a transition is valid; the schema does. Everything else flows through the same backend layer that knows how to parse and write Jira description blocks (three formats supported: plain `Field: value`, split-line, and Jira wiki markup).
 
 ## Setup
@@ -71,6 +85,23 @@ python main.py
 ```
 
 The agent runs locally without Arize keys — tracing just no-ops if `ARIZE_SPACE_ID` or `ARIZE_API_KEY` is missing.
+
+## Web UI
+
+```bash
+uvicorn backend.web:app --reload
+# open http://localhost:8000
+```
+
+A single-page chat interface with the title "ADHOC Drone Show Manager", an opening greeting, and four clickable example prompts. Shows render as cards inline — a small card per row for list results, and a rich card for `get_show` that highlights any fields blocking the next status transition. The dark theme nods to [adhoccreativehouse.com](https://www.adhoccreativehouse.com/).
+
+Under the hood the web server (`backend/web.py`) wraps the same `AgentSession` the terminal REPL uses, so one Arize trace covers each user workflow (which may span multiple chat turns) rather than each HTTP request — see `ARCHITECTURE.md` for why that matters for the live evaluators.
+
+### Deploy to Replit
+
+1. Import this repo into a new Repl.
+2. Set `OPENAI_API_KEY`, `JIRA_URL`, `JIRA_USERNAME`, `JIRA_API_TOKEN`, and (optional) `ARIZE_SPACE_ID` / `ARIZE_API_KEY` in Replit Secrets.
+3. Hit Run. The `.replit` file already points at `uvicorn backend.web:app`.
 
 ## What it can do
 
@@ -94,11 +125,11 @@ Five tools, scoped to Jira project `KAN`:
 ## Project layout
 
 ```
-agent/      system prompt + Agents SDK Agent
+agent/      system prompt, Agents SDK Agent, shared session/trace lifecycle
 tools/      the 5 tools, decorated for the SDK
-backend/    Jira client, show schema, parser/writer, Arize tracing
+backend/    Jira client, show schema, parser/writer, Arize tracing, FastAPI web app
+frontend/   single-page chat UI (index.html + app.js + style.css)
 tests/      parser/writer round-trip tests
-frontend/   reserved for a later iteration
 ```
 
 ## Tests
@@ -117,6 +148,10 @@ Each smoke test prompt is wrapped in its own named trace (`smoke:01_list_contrac
 ## Observability
 
 When `ARIZE_SPACE_ID` and `ARIZE_API_KEY` are set, every turn, tool call, and OpenAI call shows up as a span in Arize AX under the project named in `ARIZE_PROJECT_NAME` (default `drone-show-manager`).
+
+![Arize AX trace view — workflow traces with nested Agent / LLM / Tool spans and their inputs and outputs](screenshots/arize-traces.png)
+
+*Each user workflow is one trace; expanding it shows the nested Agent → LLM → Tool spans with the input that opened the workflow and the final output, which the live evaluators score.*
 
 Traces are grouped at the **workflow** level — a single lookup is one trace, while a multi-turn create or transition flow is also one trace that spans all the intake turns. The boundary is detected automatically: a workflow trace closes when a mutation tool fires successfully, or when the agent's response no longer demands more user input. See `ARCHITECTURE.md` for the heuristic.
 

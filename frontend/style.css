@@ -1,0 +1,556 @@
+:root {
+  --bg: #0c0c0e;
+  --surface: #15151a;
+  --surface-2: #1d1d23;
+  --border: #2a2a32;
+  --text: #e8e6e0;
+  --text-dim: #9a9893;
+  --text-muted: #6b6964;
+  --accent: #c8c4b8;
+  --accent-warn: #d4a373;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.topbar {
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.stack {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 0;
+}
+
+.messages {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ─── Empty state: greeting + composer centered in the viewport ─── */
+body.state-empty .stack {
+  justify-content: center;
+}
+
+body.state-empty .chat {
+  flex: 0 0 auto;
+  overflow: visible;
+  padding-bottom: 18px;
+}
+
+body.state-empty .messages {
+  align-items: center;
+}
+
+body.state-empty .msg-agent {
+  width: auto;
+  align-self: center;
+}
+
+body.state-empty .msg-agent .msg-text {
+  background: transparent;
+  border: none;
+  text-align: center;
+  font-size: 18px;
+  color: var(--text);
+}
+
+body.state-empty .chips {
+  justify-content: center;
+}
+
+body.state-empty .composer {
+  border-top: none;
+  background: transparent;
+}
+
+.msg {
+  max-width: 100%;
+  padding: 14px 18px;
+  border-radius: 10px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.msg-user {
+  align-self: flex-end;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  max-width: 75%;
+}
+
+.msg-agent {
+  align-self: flex-start;
+  background: transparent;
+  padding: 0;
+  width: 100%;
+}
+
+.msg-agent .msg-text {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 14px 18px;
+  border-radius: 10px;
+}
+
+.msg-thinking {
+  color: var(--text-muted);
+  font-style: italic;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 14px 18px;
+  border-radius: 10px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.chip {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.chip:hover {
+  background: var(--surface-2);
+  border-color: var(--text-muted);
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* ─── Show list ───────────────────────────────────────────────
+   A multi-card list of shows renders inside one bordered box that shows
+   ~4 cards then scrolls internally on its OWN scrollbar, so a long list
+   (e.g. "who are the sales people") doesn't flood the main chat scroll.
+   The scrollbar is styled to always show — macOS overlay scrollbars are
+   invisible until you scroll, which hides the affordance otherwise. */
+.show-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 252px;        /* ~4 cards + gaps + padding; rest scroll */
+  overflow-y: scroll;       /* always reserve the scrollbar gutter */
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.show-list .card-small {
+  flex: 0 0 auto;           /* don't let cards shrink to fit */
+}
+
+/* Always-visible custom scrollbar (WebKit: Chrome/Safari/Edge). */
+.show-list::-webkit-scrollbar {
+  width: 10px;
+}
+.show-list::-webkit-scrollbar-track {
+  background: var(--surface);
+  border-radius: 8px;
+}
+.show-list::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 8px;
+  border: 2px solid var(--surface);
+}
+.show-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
+/* Firefox */
+.show-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) var(--surface);
+}
+
+/* ─── Small card ─────────────────────────────────────────── */
+.card-small {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.card-small.card-clickable {
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.card-small.card-clickable:hover {
+  background: var(--surface-2);
+  border-color: var(--text-muted);
+}
+
+.card-small-key {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.card-small-summary {
+  color: var(--text);
+}
+
+.card-small-status {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.card-created,
+.card-transitioned {
+  border-color: var(--accent);
+}
+.card-created .card-small-status,
+.card-transitioned .card-small-status {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ─── Big card ────────────────────────────────────────────── */
+.card-big {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 20px;
+}
+
+.card-big-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: baseline;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+
+.card-big-key {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.card-big-summary {
+  font-size: 16px;
+  color: var(--text);
+}
+
+.card-big-status {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+/* Edit mode: highlight the whole card so it's clear you're editing. */
+.card-big.card-editing {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.card-big:not(.card-editing) {
+  cursor: pointer;
+}
+
+/* ─── Accordion sections ──────────────────────────────────── */
+.card-section {
+  border-top: 1px solid var(--border);
+}
+.card-section:first-of-type {
+  border-top: none;
+}
+
+.card-section-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 2px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.card-section-chevron {
+  color: var(--text-muted);
+  font-size: 11px;
+  width: 12px;
+}
+
+.card-section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+}
+
+.card-section-head.section-missing .card-section-title {
+  color: var(--text);
+}
+
+.card-section-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent-warn);
+  border: 1px solid var(--accent-warn);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.card-section-body {
+  padding: 2px 2px 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* ─── Fields (view) ───────────────────────────────────────── */
+.card-field {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.card-field-label {
+  color: var(--text-dim);
+}
+
+.card-field-value {
+  color: var(--text);
+}
+
+.card-field-empty {
+  color: var(--text-muted);
+}
+
+.card-field-missing .card-field-label {
+  color: var(--accent-warn);
+}
+
+.card-field-tag {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent-warn);
+  border: 1px solid var(--accent-warn);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: 2px;
+}
+
+/* ─── Fields (edit) ───────────────────────────────────────── */
+.card-field-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.card-field-edit .card-field-label {
+  font-size: 12px;
+}
+
+.card-field-edit.card-field-missing .card-field-label {
+  color: var(--accent-warn);
+}
+
+.card-field-input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.card-field-input:focus {
+  outline: none;
+  border-color: var(--text-muted);
+}
+
+/* ─── Actions + errors ────────────────────────────────────── */
+.card-big-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.card-edit-hint {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.card-btn {
+  font-family: inherit;
+  font-size: 13px;
+  border-radius: 7px;
+  padding: 8px 14px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+.card-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.card-btn.btn-primary {
+  background: var(--accent);
+  color: #14140f;
+  border-color: var(--accent);
+}
+.card-btn.btn-primary:hover:not(:disabled) {
+  background: var(--text);
+}
+
+.card-btn.btn-ghost {
+  background: transparent;
+  color: var(--text-dim);
+}
+.card-btn.btn-ghost:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* Edit mode (Save first): right-align the button group. View mode uses the
+   hint's flex:1 to push the Transition button right. */
+.card-big-actions .card-btn:first-child {
+  margin-left: auto;
+}
+
+.card-error {
+  margin-top: 12px;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--accent-warn);
+  border: 1px solid var(--accent-warn);
+  border-radius: 6px;
+}
+
+/* ─── Composer ────────────────────────────────────────────── */
+.composer {
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  padding: 16px 24px;
+}
+
+.composer form {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  gap: 10px;
+}
+
+#composer-input {
+  flex: 1;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 15px;
+  font-family: inherit;
+}
+
+#composer-input:focus {
+  outline: none;
+  border-color: var(--text-muted);
+}
+
+#composer-input:disabled {
+  opacity: 0.5;
+}
+
+#composer-send {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 18px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+#composer-send:hover:not(:disabled) {
+  background: var(--border);
+  border-color: var(--text-muted);
+}
+
+#composer-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
