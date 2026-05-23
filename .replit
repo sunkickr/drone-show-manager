@@ -1,7 +1,17 @@
-run = "uvicorn backend.web:app --host 0.0.0.0 --port $PORT"
+run = "uvicorn backend.web:app --host 0.0.0.0 --port ${PORT:-8000}"
 
 [env]
 PYTHONUNBUFFERED = "1"
 
 [nix]
 channel = "stable-23_11"
+
+# Maps the app's port to the public URL when running in the workspace.
+[[ports]]
+localPort = 8000
+externalPort = 80
+
+# Used by "Deploy" for a permanent, always-on URL.
+[deployment]
+deploymentTarget = "autoscale"
+run = ["sh", "-c", "uvicorn backend.web:app --host 0.0.0.0 --port ${PORT:-8000}"]

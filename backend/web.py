@@ -10,6 +10,9 @@ Run on Replit: see .replit
 
 from __future__ import annotations
 
+import base64
+import os
+import secrets
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -42,6 +45,13 @@ EXAMPLES = [
     "Move the Bariloche show to Show Design",
 ]
 
+# Optional HTTP Basic Auth. Set SITE_PASSWORD (and optionally SITE_USERNAME) in
+# Replit Secrets to put the whole site — UI, static files, and API — behind a
+# browser login. Leave SITE_PASSWORD unset and the site is open, so local
+# development isn't gated.
+SITE_USERNAME = os.environ.get("SITE_USERNAME", "adhoc")
+SITE_PASSWORD = os.environ.get("SITE_PASSWORD")
+
 sessions: dict[str, AgentSession] = {}
 
 
@@ -55,6 +65,29 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.middleware("http")
+async def require_password(request, call_next):
+    # No-op unless SITE_PASSWORD is configured. When set, every route requires
+    # HTTP Basic Auth. Constant-time compares avoid timing leaks.
+    if SITE_PASSWORD:
+        header = request.headers.get("authorization", "")
+        authorized = False
+        if header.startswith("Basic "):
+            try:
+                user, _, pw = base64.b64decode(header[6:]).decode("utf-8").partition(":")
+                authorized = secrets.compare_digest(user, SITE_USERNAME) and \
+                    secrets.compare_digest(pw, SITE_PASSWORD)
+            except (ValueError, UnicodeDecodeError):
+                authorized = False
+        if not authorized:
+            from starlette.responses import Response
+            return Response(
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="ADHOC Drone Show Manager"'},
+            )
+    return await call_next(request)
 
 
 @app.middleware("http")
