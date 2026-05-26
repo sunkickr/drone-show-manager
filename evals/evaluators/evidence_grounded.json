@@ -1,7 +1,7 @@
 {
   "name": "evidence_grounded",
   "template_name": "evidence_grounded",
-  "model_name": "gpt-4.1",
+  "model_name": "gpt-4.1-mini",
   "data_granularity": "trace",
   "direction": "maximize",
   "include_explanations": true,

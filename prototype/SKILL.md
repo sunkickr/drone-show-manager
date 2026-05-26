@@ -39,16 +39,16 @@ If `AGENT_CONTEXT.md` doesn't exist yet, create it before invoking the script. A
 ## How to invoke
 
 ```bash
-# Analyze only (no mutations)
+# Analyze AND apply suggested fixes (default behavior)
 python prototype/alyx_fix.py \
     --project drone-show-manager \
     --workflow "<workflow-tag-from-the-test-run>" \
     --evaluator all \
     --context AGENT_CONTEXT.md \
-    --wait 120
+    --wait 600
 
-# Analyze AND apply suggested fixes
-python prototype/alyx_fix.py ... --apply
+# Analyze only — no writes, no new evaluator versions pushed
+python prototype/alyx_fix.py ... --dry-run
 ```
 
 Flags:
@@ -59,15 +59,15 @@ Flags:
 | `--workflow` | yes | The workflow tag the test run used (typically a timestamp like `drone-show-manager-test-2026-05-19T03:14:00Z`) |
 | `--evaluator` | no | Defaults to `all`; can narrow to one evaluator |
 | `--context` | yes | Path to the agent context file |
-| `--wait` | no | Seconds to wait for async eval scoring (default 0) |
-| `--apply` | no | When set, patches local `evals/evaluators/<name>.json` for each judge-bug fix AND pushes a new evaluator version to Arize. Off by default. |
+| `--wait` | no | Seconds the script sleeps before fetching, so Arize's async pipeline has time to score the new traces. Rule of thumb: ~30-40s per evaluator per trace (e.g. `600` for 15 traces × 3 judges; `5` for a quick demo). Default `0`. |
+| `--dry-run` | no | When set, prints suggested patches but writes nothing and pushes no new evaluator versions. Default behavior is to patch local `evals/evaluators/<name>.json` AND push a new evaluator version to Arize. |
 
-### When to use --apply
+### When to use --dry-run
 
-- **Without `--apply` (default)**: the script returns suggested fixes but doesn't commit. Use when you want to review fixes before applying — typical for the first iteration of a new evaluator.
-- **With `--apply`**: the script patches the local JSON and pushes a new evaluator version automatically. Use when you trust the analysis and want an autonomous iteration loop. Best for re-running an already-validated evaluator against a fresh test suite.
+- **Default (no flag)**: the script patches the local JSON and pushes a new evaluator version automatically. Use when you trust the analysis and want an autonomous iteration loop — the typical case for re-running an already-validated evaluator against a fresh test suite.
+- **With `--dry-run`**: the script returns suggested fixes but doesn't commit. Use when you want to review fixes before applying — typical for the first iteration of a new evaluator, or any change to a judge whose calibration matters.
 
-After `--apply` succeeds, the workflow becomes: re-run tests → script analyzes again → if all evaluators report "No fix needed", the loop has converged.
+After a (non-dry-run) apply succeeds, the workflow becomes: re-run tests → script analyzes again → if all evaluators report "No fix needed", the loop has converged.
 
 ## Interpreting the output
 
@@ -97,18 +97,18 @@ How to act on each diagnosis:
 
 ## Limitations to communicate to the user
 
-This is a prototype, not the final feature. Three things it doesn't do that the real `ax alyx fix` would:
+This is a prototype, not the final feature. Things it doesn't do that the real `ax alyx fix` would:
 
-- Doesn't auto-apply fixes (no `--apply` flag).
+- Apply is one-way — no diff/preview UI, no rollback. Use `--dry-run` first when in doubt.
 - Doesn't filter traces by metadata.workflow attribute; uses a name pattern fallback.
 - Doesn't have full platform-internal context — operates from what the `ax` CLI exposes plus the agent context file you provide.
 
-If the user asks "can you just do all of this," explain that the prototype suggests fixes but doesn't apply them, and that the real feature would.
+If the user asks "can you just do all of this," explain that the prototype both suggests AND applies fixes by default (use `--dry-run` to preview), but lacks the real product's structured patch / rollback / platform-internal context.
 
 ## Failure modes
 
 - **"context file not found"** — Create `AGENT_CONTEXT.md` first.
-- **"No traces with evaluations found"** — Either the test run hasn't completed, async scoring hasn't landed yet (re-run with `--wait 120`), or the workflow tag doesn't match any traces.
+- **"No traces with evaluations found"** — Either the test run hasn't completed, async scoring hasn't landed yet (re-run with a larger `--wait`, e.g. `600` for 15 traces × 3 judges), or the workflow tag doesn't match any traces.
 - **OpenAI API error** — Check `OPENAI_API_KEY` in `.env`; the script uses the `OPENAI_JUDGE_MODEL` env var or `gpt-4.1` as fallback.
 
 ## Example: full iteration cycle
@@ -117,17 +117,15 @@ If the user asks "can you just do all of this," explain that the prototype sugge
 # 1. Run tests (tags traces with a unique workflow attribute)
 python tests/smoke_test.py
 
-# 2. Ask Alyx to analyze
+# 2. Ask Alyx to analyze AND apply fixes (default). Add --dry-run to preview only.
 python prototype/alyx_fix.py \
     --project drone-show-manager \
     --workflow "drone-show-manager-test-2026-05-19T03:14:00Z" \
     --evaluator all \
     --context AGENT_CONTEXT.md \
-    --wait 120
+    --wait 600
 
-# 3. Apply the suggested fixes (manually, since prototype doesn't auto-apply)
-
-# 4. Re-run tests
+# 3. Re-run tests
 python tests/smoke_test.py
 ```
 

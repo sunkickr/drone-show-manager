@@ -11,14 +11,18 @@ The script accepts the same CLI shape the real command would expose, fetches rec
 python tests/smoke_test.py
 
 # 2. Claude Code asks Alyx (via the prototype script).
-# Add --apply to actually patch the local JSON and push a new evaluator version.
+# --wait blocks until Arize's async pipeline has scored the new traces.
+# Rule of thumb: ~30-40s per evaluator per trace once it picks the trace up,
+# so 15 traces × 3 online judges (45 evaluations) lands in ~8-10 min.
+# For a quick demo run on a couple of traces, drop it to --wait 5.
+# By default the script patches the local JSON and pushes a new evaluator
+# version. Add --dry-run to analyze only (no writes).
 python prototype/alyx_fix.py \
     --project drone-show-manager \
     --workflow "drone-show-manager-test-yyyy-MM-dd'T'HH:mm:ss.SSS'Z'" \
     --evaluator all \
     --context AGENT_CONTEXT.md \
-    --wait 120 \
-    --apply
+    --wait 600
 
 # 3. Output: one analysis block per evaluator
 ▸ evaluator:      evidence_grounded
@@ -44,8 +48,8 @@ python tests/smoke_test.py
 | Authenticate | Use Arize's CLI auth | Inherits the user's `ax` profile |
 | Fetch traces | Filter by `metadata.workflow` attribute | Filters by name pattern via `ax spans export`, falls back to mock data if none found |
 | Analyze | Call Alyx's internal workflows | Calls OpenAI with a system prompt approximating Alyx |
-| Apply fix | Call `ax evaluators create-template-evaluator-version` automatically | With `--apply`: patches local `evals/evaluators/<name>.json` and pushes a new version. Without `--apply`: returns the suggested patch but doesn't commit. |
-| Honor `--wait` | Poll until evaluators score the traces | Capped at 5s for demo speed |
+| Apply fix | Call `ax evaluators create-template-evaluator-version` automatically | Default: patches local `evals/evaluators/<name>.json` and pushes a new version. With `--dry-run`: prints the suggested patch but doesn't commit. |
+| Honor `--wait` | Poll until evaluators have actually scored the new traces | Plain `time.sleep(wait)` — caller sets a value that exceeds expected scoring latency |
 
 ## Requirements
 
@@ -62,13 +66,13 @@ python tests/smoke_test.py
 | `--workflow` | yes | Workflow tag identifying this test run |
 | `--evaluator` | no (default `all`) | Evaluator name to focus on, or `all` |
 | `--context` | yes | Path to a markdown/text file describing the agent (system prompt, design rationale, recent changes) |
-| `--wait` | no (default `0`) | Seconds to wait for async eval scoring before fetching |
-| `--apply` | no | When set, applies each suggested fix: patches `evals/evaluators/<name>.json` in place, then pushes a new evaluator version via `ax evaluators create-template-evaluator-version`. Off by default for safety. |
+| `--wait` | no (default `0`) | Seconds the script sleeps before fetching, to give Arize's async pipeline time to score the new traces. Rule of thumb: ~30-40s per evaluator per trace. Pass `600` for a 15-trace × 3-judge run; pass `5` for a quick demo. |
+| `--dry-run` | no | When set, prints the proposed patches but writes nothing and pushes no new evaluator versions. Default behavior is to apply each suggested fix: patches `evals/evaluators/<name>.json` in place, then pushes a new evaluator version via `ax evaluators create-template-evaluator-version`. |
 
 ## Caveats — what makes this a prototype, not the real thing
 
 1. **No platform-internal access.** The real Alyx has direct access to Arize's evaluator definitions, variable resolution logic, and update endpoints. The prototype works from whatever the `ax` CLI exposes plus a system prompt.
-2. **`--apply` is a text-replacement patch, not a structured update.** The model returns an `old_text`/`new_text` pair that gets find-and-replaced into the local JSON. The real Alyx would produce a richer, structurally-aware patch.
+2. **The apply path is a text-replacement patch, not a structured update.** The model returns an `old_text`/`new_text` pair that gets find-and-replaced into the local JSON. The real Alyx would produce a richer, structurally-aware patch. Use `--dry-run` to inspect the patch before letting it write.
 3. **No multi-evaluator orchestration.** The real Alyx would understand which evaluators are configured on the project. The prototype reads local JSON files in `evals/evaluators/`.
 4. **No fine-grained variable resolution diagnosis.** The real Alyx could tell you exactly which span the judge's `{output}` resolved to. The prototype reasons from explanations.
 5. **No cost guardrails.** The real CLI would have quotas and pricing. The prototype spends OpenAI tokens directly.
@@ -102,7 +106,7 @@ The agent context is the most consequential input — without it Alyx falls back
 
 - A `--run` flag that auto-discovers traces by run ID (cleaner than `--workflow` pattern matching)
 - Multi-trace grouping by root cause across failures
-- `--apply` flag for autonomous fix commits
+- Real apply-with-rollback (the prototype's apply path is one-way; no diff/preview, no undo)
 - An MCP server wrapper for agents that prefer auto-discovery over CLI
 - Telemetry on adoption, context size, and time-to-fix
 

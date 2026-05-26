@@ -1,20 +1,20 @@
 """Prototype of `ax alyx fix` — agent-native evaluator iteration.
 
 Pulls recent test traces, asks an OpenAI model to diagnose each evaluator,
-and (optionally with --apply) commits a suggested fix as a new evaluator
-version on Arize. Designed for demos, not production.
+and by default commits a suggested fix as a new evaluator version on Arize.
+Pass --dry-run to analyze only (no writes). Designed for demos, not production.
 
 Usage:
-    # Analyze only
+    # Analyze AND apply suggested fixes (default)
     python prototype/alyx_fix.py \\
         --project drone-show-manager \\
         --workflow "drone-show-manager-test-<timestamp>" \\
         --evaluator all \\
         --context AGENT_CONTEXT.md \\
-        --wait 120
+        --wait 600
 
-    # Analyze AND apply suggested fixes
-    python prototype/alyx_fix.py ... --apply
+    # Analyze only — no patches written, no new evaluator versions pushed
+    python prototype/alyx_fix.py ... --dry-run
 """
 
 import argparse
@@ -33,7 +33,7 @@ load_dotenv(override=True)
 
 AX = "/Users/davidkoenitzer/.local/bin/ax"
 SPACE_ID = os.environ.get("ARIZE_SPACE_ID", "")
-MODEL = os.environ.get("OPENAI_JUDGE_MODEL", "gpt-4.1")
+MODEL = os.environ.get("OPENAI_JUDGE_MODEL", "gpt-5.4")
 EVALUATORS_DIR = Path(__file__).resolve().parent.parent / "evals" / "evaluators"
 
 
@@ -73,7 +73,7 @@ def fetch_traces(project: str, workflow: str, wait: int) -> list:
     """Fetch recent test traces with evaluations attached."""
     if wait > 0:
         print(f"  ↳ waiting {wait}s for async eval scoring...", file=sys.stderr)
-        time.sleep(min(wait, 5))   # capped for demo speed
+        time.sleep(wait)
 
     print(f"  ↳ fetching traces for workflow '{workflow}' in project '{project}'", file=sys.stderr)
 
@@ -266,8 +266,9 @@ def main():
     parser.add_argument("--evaluator", default="all")
     parser.add_argument("--context", required=True)
     parser.add_argument("--wait", type=int, default=0)
-    parser.add_argument("--apply", action="store_true",
-                        help="Apply suggested fixes by patching local JSON and pushing a new evaluator version.")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Analyze and print proposed fixes without writing JSON or pushing new evaluator versions. "
+                             "Default behavior is to apply.")
     args = parser.parse_args()
 
     ctx_path = Path(args.context)
@@ -292,7 +293,10 @@ def main():
     analyses = result.get("evaluators", [])
     render(analyses)
 
-    if args.apply:
+    if args.dry_run:
+        if any(a.get("fix_template_patch") for a in analyses):
+            print("Dry run: fixes available. Re-run without --dry-run to commit them.", file=sys.stderr)
+    else:
         print("Applying fixes:", file=sys.stderr)
         applied = 0
         for a in analyses:
@@ -301,8 +305,6 @@ def main():
                 if apply_fix(configs[a["name"]], patch):
                     applied += 1
         print(f"\nApplied {applied} fix(es).", file=sys.stderr)
-    elif any(a.get("fix_template_patch") for a in analyses):
-        print("Fixes available. Re-run with --apply to commit them.", file=sys.stderr)
 
 
 if __name__ == "__main__":
