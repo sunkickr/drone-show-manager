@@ -11,12 +11,7 @@ The script accepts the same CLI shape the real command would expose, fetches rec
 python tests/smoke_test.py
 
 # 2. Claude Code asks Alyx (via the prototype script).
-# --wait blocks until Arize's async pipeline has scored the new traces.
-# Rule of thumb: ~30-40s per evaluator per trace once it picks the trace up,
-# so 15 traces × 3 online judges (45 evaluations) lands in ~8-10 min.
-# For a quick demo run on a couple of traces, drop it to --wait 5.
-# By default the script patches the local JSON and pushes a new evaluator
-# version. Add --dry-run to analyze only (no writes).
+# --wait blocks until Arize's async pipeline has scored the new traces. 15 traces × 3 online judges (45 evaluations) lands in ~8-10 min.
 python prototype/alyx_fix.py \
     --project drone-show-manager \
     --workflow "drone-show-manager-test-yyyy-MM-dd'T'HH:mm:ss.SSS'Z'" \
